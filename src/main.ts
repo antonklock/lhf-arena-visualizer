@@ -310,15 +310,15 @@ function setupTimelineControls(): void {
 function setupVideoControls(): void {
   const autoDetectCheckbox = document.getElementById('auto-detect-videos') as HTMLInputElement
   
-  // Handle refresh button clicks
-  const refreshButtons = document.querySelectorAll('.refresh-btn')
-  refreshButtons.forEach(button => {
+  // Handle remove button clicks
+  const removeButtons = document.querySelectorAll('.remove-btn')
+  removeButtons.forEach(button => {
     button.addEventListener('click', () => {
       const planeName = button.getAttribute('data-plane')
       const input = document.querySelector(`.video-input[data-plane="${planeName}"]`) as HTMLInputElement
       
-      if (input && planeName) {
-        handleVideoRefresh(planeName, input.value)
+      if (planeName) {
+        handleVideoRemove(planeName, input)
       }
     })
   })
@@ -493,7 +493,7 @@ function showTemporaryMessage(message: string, type: 'success' | 'warning' | 'er
   toast.textContent = message
   toast.style.cssText = `
     position: fixed;
-    top: 50px;
+    bottom: 50px;
     right: 50px;
     padding: 12px 20px;
     border-radius: 6px;
@@ -581,6 +581,30 @@ async function handleVideoRefreshFromFile(planeName: string, file: File): Promis
       }, 500)
     }
   }
+}
+
+// Handle video remove
+function handleVideoRemove(planeName: string, input: HTMLInputElement | null): void {
+  console.log(`Removing video from ${planeName}`)
+  
+  // Get the visualizer instance from the global scope
+  const visualizer = (window as any).visualizer
+  if (!visualizer) {
+    console.error('Visualizer not found')
+    return
+  }
+
+  // Clear video from the plane
+  visualizer.getArena().clearVideoFromPlane(planeName)
+  
+  // Clear and reset the text input
+  if (input) {
+    input.value = ''
+    input.style.borderColor = '#444'
+    input.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
+  }
+  
+  console.log(`Video removed from ${planeName} and text input cleared`)
 }
 
 // Handle video refresh/load

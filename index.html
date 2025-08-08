@@ -322,7 +322,7 @@
         background: rgba(255, 255, 255, 0.15);
       }
       
-      .refresh-btn {
+      .file-btn {
         width: 24px;
         height: 24px;
         background: rgba(78, 205, 196, 0.2);
@@ -335,39 +335,39 @@
         justify-content: center;
         font-size: 12px;
         transition: all 0.2s;
+        margin-right: 4px;
       }
       
-      .refresh-btn:hover {
+      .file-btn:hover {
         background: rgba(78, 205, 196, 0.4);
         transform: scale(1.1);
       }
       
-      .refresh-btn:active {
+      .file-btn:active {
         transform: scale(0.95);
       }
       
-      .file-btn {
+      .remove-btn {
         width: 24px;
         height: 24px;
-        background: rgba(253, 121, 168, 0.2);
-        border: 1px solid #fd79a8;
+        background: rgba(128, 128, 128, 0.2);
+        border: 1px solid #808080;
         border-radius: 3px;
-        color: #fd79a8;
+        color: #ff4757;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 12px;
         transition: all 0.2s;
-        margin-right: 4px;
       }
       
-      .file-btn:hover {
-        background: rgba(253, 121, 168, 0.4);
+      .remove-btn:hover {
+        background: rgba(255, 71, 87, 0.2);
         transform: scale(1.1);
       }
       
-      .file-btn:active {
+      .remove-btn:active {
         transform: scale(0.95);
       }
       
@@ -584,74 +584,74 @@
         
         <div class="video-input-group">
           <div class="video-input-label">A7:</div>
-          <input type="text" class="video-input" data-plane="A7" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="A7" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="A7" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="A7" title="Refresh A7">⟳</button>
+          <input type="text" class="video-input" data-plane="A7" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="A7" title="Remove video from A7">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">BIG-MAP:</div>
-          <input type="text" class="video-input" data-plane="BIG-MAP" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="BIG-MAP" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="BIG-MAP" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="BIG-MAP" title="Refresh BIG-MAP">⟳</button>
+          <input type="text" class="video-input" data-plane="BIG-MAP" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="BIG-MAP" title="Remove video from BIG-MAP">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">ICE:</div>
-          <input type="text" class="video-input" data-plane="ICE" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="ICE" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="ICE" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="ICE" title="Refresh ICE">⟳</button>
+          <input type="text" class="video-input" data-plane="ICE" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="ICE" title="Remove video from ICE">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">A1:</div>
-          <input type="text" class="video-input" data-plane="A1" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="A1" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="A1" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="A1" title="Refresh A1">⟳</button>
+          <input type="text" class="video-input" data-plane="A1" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="A1" title="Remove video from A1">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">A2:</div>
-          <input type="text" class="video-input" data-plane="A2" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="A2" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="A2" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="A2" title="Refresh A2">⟳</button>
+          <input type="text" class="video-input" data-plane="A2" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="A2" title="Remove video from A2">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">K2:</div>
-          <input type="text" class="video-input" data-plane="K2" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="K2" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="K2" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="K2" title="Refresh K2">⟳</button>
+          <input type="text" class="video-input" data-plane="K2" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="K2" title="Remove video from K2">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">K4:</div>
-          <input type="text" class="video-input" data-plane="K4" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="K4" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="K4" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="K4" title="Refresh K4">⟳</button>
+          <input type="text" class="video-input" data-plane="K4" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="K4" title="Remove video from K4">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">Skeptrons:</div>
-          <input type="text" class="video-input" data-plane="Skeptrons" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="Skeptrons" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="Skeptrons" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="Skeptrons" title="Refresh Skeptrons">⟳</button>
+          <input type="text" class="video-input" data-plane="Skeptrons" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="Skeptrons" title="Remove video from Skeptrons">✕</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">Stairs:</div>
-          <input type="text" class="video-input" data-plane="Stairs" placeholder="Enter video URL or choose file...">
           <input type="file" class="file-input" data-plane="Stairs" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="Stairs" title="Choose local file">📁</button>
-          <button class="refresh-btn" data-plane="Stairs" title="Refresh Stairs">⟳</button>
+          <input type="text" class="video-input" data-plane="Stairs" placeholder="Enter video URL or choose file...">
+          <button class="remove-btn" data-plane="Stairs" title="Remove video from Stairs">✕</button>
         </div>
       </div>
       
