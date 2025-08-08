@@ -38,6 +38,9 @@ export class CameraController {
     
     // Initialize spherical coordinates from camera position
     this.spherical.setFromVector3(this.camera.position.clone().sub(this.target))
+    
+    // Start zoomed in to the maximum (minimum radius)
+    this.spherical.radius = 5
   }
 
   private initEventListeners(): void {
@@ -125,7 +128,8 @@ export class CameraController {
       const deltaY = event.clientY - this.mouse.y
 
       this.spherical.theta -= deltaX * this.mouse.sensitivity
-      this.spherical.phi += deltaY * this.mouse.sensitivity
+      // Invert the up/down mouse movement by negating deltaY
+      this.spherical.phi -= deltaY * this.mouse.sensitivity
 
       // Limit phi to prevent camera flipping
       this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi))
@@ -153,18 +157,26 @@ export class CameraController {
     this.velocity.set(0, 0, 0)
     
     const speed = this.movement.speed * deltaTime
-    const boostMultiplier = this.keys.up || this.keys.down ? this.movement.boost : 1
 
-    if (this.keys.forward) this.velocity.z -= speed * boostMultiplier
-    if (this.keys.backward) this.velocity.z += speed * boostMultiplier
-    if (this.keys.left) this.velocity.x -= speed * boostMultiplier
-    if (this.keys.right) this.velocity.x += speed * boostMultiplier
+    // Horizontal movement (WASD)
+    if (this.keys.forward) this.velocity.z -= speed
+    if (this.keys.backward) this.velocity.z += speed
+    if (this.keys.left) this.velocity.x -= speed
+    if (this.keys.right) this.velocity.x += speed
 
-    // Apply movement relative to camera orientation
+    // Apply horizontal movement relative to camera orientation
     if (this.velocity.length() > 0) {
       this.direction.copy(this.velocity)
       this.direction.applyQuaternion(this.camera.quaternion)
       this.target.add(this.direction)
+    }
+
+    // Vertical movement (Q and E) - straight up/down in world space
+    if (this.keys.down) {
+      this.target.y -= speed // Q moves down
+    }
+    if (this.keys.up) {
+      this.target.y += speed // E moves up
     }
 
     // Update camera position using spherical coordinates
