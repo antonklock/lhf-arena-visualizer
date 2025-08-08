@@ -564,6 +564,85 @@ export class Arena {
     return this.videoElements.size
   }
 
+  // Audio control methods
+  public togglePlaneAudio(planeName: string): boolean {
+    const videos = this.videoElements.get(planeName)
+    if (!videos || videos.length === 0) {
+      console.warn(`No videos found for plane: ${planeName}`)
+      return false
+    }
+
+    // Toggle muted state for all videos on this plane
+    const newMutedState = !videos[0].muted
+    videos.forEach((video, index) => {
+      video.muted = newMutedState
+      console.log(`${newMutedState ? 'Muted' : 'Unmuted'} video on plane: ${planeName} (part ${index + 1})`)
+    })
+
+    return newMutedState
+  }
+
+  public isPlaneAudioMuted(planeName: string): boolean {
+    const videos = this.videoElements.get(planeName)
+    if (!videos || videos.length === 0) {
+      return true // If no videos, consider it "muted"
+    }
+    return videos[0].muted
+  }
+
+  public setPlaneAudio(planeName: string, muted: boolean): void {
+    const videos = this.videoElements.get(planeName)
+    if (!videos || videos.length === 0) {
+      console.warn(`No videos found for plane: ${planeName}`)
+      return
+    }
+
+    videos.forEach((video, index) => {
+      video.muted = muted
+      console.log(`${muted ? 'Muted' : 'Unmuted'} video on plane: ${planeName} (part ${index + 1})`)
+    })
+  }
+
+  public toggleGlobalAudio(): boolean {
+    let newGlobalMutedState = false
+    const allVideoArrays = Array.from(this.videoElements.values())
+    const allVideos = allVideoArrays.flat()
+    
+    if (allVideos.length === 0) {
+      return false
+    }
+
+    // Check current state - if any video is unmuted, we'll mute all
+    // If all are muted, we'll unmute all
+    const hasUnmutedVideos = allVideos.some(video => !video.muted)
+    newGlobalMutedState = hasUnmutedVideos
+
+    // Apply the new state to all videos
+    this.videoElements.forEach((videos, planeName) => {
+      videos.forEach((video, index) => {
+        video.muted = newGlobalMutedState
+        console.log(`Global ${newGlobalMutedState ? 'muted' : 'unmuted'} video on plane: ${planeName} (part ${index + 1})`)
+      })
+    })
+
+    return newGlobalMutedState
+  }
+
+  public setGlobalVolume(volume: number): void {
+    // Clamp volume between 0 and 1
+    const clampedVolume = Math.max(0, Math.min(1, volume))
+    
+    this.videoElements.forEach((videos, planeName) => {
+      videos.forEach((video, index) => {
+        // Only adjust volume for unmuted videos
+        if (!video.muted) {
+          video.volume = clampedVolume
+          console.log(`Set volume to ${Math.round(clampedVolume * 100)}% for video on plane: ${planeName} (part ${index + 1})`)
+        }
+      })
+    })
+  }
+
   public getGroup(): THREE.Group {
     return this.group
   }

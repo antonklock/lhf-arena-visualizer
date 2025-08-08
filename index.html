@@ -226,7 +226,8 @@
         padding: 15px;
         border-radius: 5px;
         font-size: 12px;
-        max-width: 300px;
+        max-width: 400px;
+        min-width: 380px;
         font-family: 'Courier New', monospace;
         transition: max-height 0.3s ease, transform 0.3s ease;
         max-height: 400px;
@@ -351,7 +352,7 @@
         width: 24px;
         height: 24px;
         background: rgba(128, 128, 128, 0.2);
-        border: 1px solid #808080;
+        border: none;
         border-radius: 3px;
         color: #ff4757;
         cursor: pointer;
@@ -369,6 +370,59 @@
       
       .remove-btn:active {
         transform: scale(0.95);
+      }
+      
+      .remove-btn.disabled {
+        color: #808080;
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+      
+      .remove-btn.disabled:hover {
+        background: rgba(128, 128, 128, 0.2);
+        transform: none;
+      }
+      
+      .speaker-btn {
+        width: 24px;
+        height: 24px;
+        background: rgba(128, 128, 128, 0.2);
+        border: 1px solid #808080;
+        border-radius: 3px;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        transition: all 0.2s;
+        margin-right: 4px;
+        position: relative;
+      }
+      
+      .speaker-btn:hover {
+        background: rgba(128, 128, 128, 0.4);
+        transform: scale(1.1);
+      }
+      
+      .speaker-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .speaker-btn.muted {
+        opacity: 0.5;
+      }
+      
+      .speaker-btn.muted::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        right: 2px;
+        bottom: 2px;
+        background: linear-gradient(to bottom right, transparent 45%, #ff4757 45%, #ff4757 55%, transparent 55%);
+        border-radius: 2px;
+        pointer-events: none;
       }
       
       .timeline-panel {
@@ -501,6 +555,109 @@
         min-width: 45px;
         text-align: center;
       }
+      
+      .volume-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: 15px;
+        padding-left: 15px;
+        border-left: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      
+      .master-mute {
+        border-color: #808080;
+        color: white;
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+        position: relative;
+      }
+      
+      .master-mute:hover {
+        background: rgba(128, 128, 128, 0.2);
+      }
+      
+      .master-mute.muted {
+        opacity: 0.5;
+      }
+      
+      .master-mute.muted::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        right: 3px;
+        bottom: 3px;
+        background: linear-gradient(to bottom right, transparent 45%, #ff4757 45%, #ff4757 55%, transparent 55%);
+        border-radius: 2px;
+        pointer-events: none;
+      }
+      
+      .volume-slider {
+        display: flex;
+        align-items: center;
+        min-width: 80px;
+      }
+      
+      .volume-slider input[type="range"] {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 2px;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      
+      .volume-slider input[type="range"]::-webkit-slider-track {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+      }
+      
+      .volume-slider input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        -webkit-appearance: none;
+        height: 12px;
+        width: 12px;
+        background: #ffc107;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid white;
+        transition: all 0.2s;
+      }
+      
+      .volume-slider input[type="range"]::-webkit-slider-thumb:hover {
+        background: #ffcd39;
+        transform: scale(1.1);
+      }
+      
+      .volume-slider input[type="range"]::-moz-range-track {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        border: none;
+      }
+      
+      .volume-slider input[type="range"]::-moz-range-thumb {
+        height: 12px;
+        width: 12px;
+        background: #ffc107;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid white;
+        transition: all 0.2s;
+      }
+      
+      .volume-slider input[type="range"]::-moz-range-thumb:hover {
+        background: #ffcd39;
+        transform: scale(1.1);
+      }
     </style>
   </head>
   <body>
@@ -583,75 +740,84 @@
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="A7" title="Remove video from A7">✕</button>
           <div class="video-input-label">A7:</div>
           <input type="file" class="file-input" data-plane="A7" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="A7" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="A7" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="A7" title="Remove video from A7">✕</button>
+          <button class="speaker-btn" data-plane="A7" title="Toggle audio for A7">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="BIG-MAP" title="Remove video from BIG-MAP">✕</button>
           <div class="video-input-label">BIG-MAP:</div>
           <input type="file" class="file-input" data-plane="BIG-MAP" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="BIG-MAP" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="BIG-MAP" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="BIG-MAP" title="Remove video from BIG-MAP">✕</button>
+          <button class="speaker-btn" data-plane="BIG-MAP" title="Toggle audio for BIG-MAP">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="ICE" title="Remove video from ICE">✕</button>
           <div class="video-input-label">ICE:</div>
           <input type="file" class="file-input" data-plane="ICE" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="ICE" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="ICE" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="ICE" title="Remove video from ICE">✕</button>
+          <button class="speaker-btn" data-plane="ICE" title="Toggle audio for ICE">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="A1" title="Remove video from A1">✕</button>
           <div class="video-input-label">A1:</div>
           <input type="file" class="file-input" data-plane="A1" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="A1" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="A1" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="A1" title="Remove video from A1">✕</button>
+          <button class="speaker-btn" data-plane="A1" title="Toggle audio for A1">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="A2" title="Remove video from A2">✕</button>
           <div class="video-input-label">A2:</div>
           <input type="file" class="file-input" data-plane="A2" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="A2" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="A2" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="A2" title="Remove video from A2">✕</button>
+          <button class="speaker-btn" data-plane="A2" title="Toggle audio for A2">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="K2" title="Remove video from K2">✕</button>
           <div class="video-input-label">K2:</div>
           <input type="file" class="file-input" data-plane="K2" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="K2" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="K2" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="K2" title="Remove video from K2">✕</button>
+          <button class="speaker-btn" data-plane="K2" title="Toggle audio for K2">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="K4" title="Remove video from K4">✕</button>
           <div class="video-input-label">K4:</div>
           <input type="file" class="file-input" data-plane="K4" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="K4" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="K4" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="K4" title="Remove video from K4">✕</button>
+          <button class="speaker-btn" data-plane="K4" title="Toggle audio for K4">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="Skeptrons" title="Remove video from Skeptrons">✕</button>
           <div class="video-input-label">Skeptrons:</div>
           <input type="file" class="file-input" data-plane="Skeptrons" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="Skeptrons" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="Skeptrons" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="Skeptrons" title="Remove video from Skeptrons">✕</button>
+          <button class="speaker-btn" data-plane="Skeptrons" title="Toggle audio for Skeptrons">🔊</button>
         </div>
         
         <div class="video-input-group">
+          <button class="remove-btn" data-plane="Stairs" title="Remove video from Stairs">✕</button>
           <div class="video-input-label">Stairs:</div>
           <input type="file" class="file-input" data-plane="Stairs" accept="video/*" style="display: none;">
           <button class="file-btn" data-plane="Stairs" title="Choose local file">📁</button>
           <input type="text" class="video-input" data-plane="Stairs" placeholder="Enter video URL or choose file...">
-          <button class="remove-btn" data-plane="Stairs" title="Remove video from Stairs">✕</button>
+          <button class="speaker-btn" data-plane="Stairs" title="Toggle audio for Stairs">🔊</button>
         </div>
       </div>
       
@@ -671,6 +837,13 @@
             </div>
             <span class="timeline-time total-time">0:00</span>
             <span class="video-count">0 videos</span>
+          </div>
+          
+          <div class="volume-controls">
+            <button class="timeline-btn master-mute" title="Mute/Unmute All Videos">🔊</button>
+            <div class="volume-slider">
+              <input type="range" id="master-volume" min="0" max="100" value="100" title="Master Volume">
+            </div>
           </div>
         </div>
       </div>

@@ -300,6 +300,21 @@ function setupTimelineControls(): void {
     }
   })
 
+  // Setup global volume controls
+  const masterMuteBtn = document.querySelector('.master-mute') as HTMLElement
+  const masterVolumeSlider = document.getElementById('master-volume') as HTMLInputElement
+  
+  if (masterMuteBtn) {
+    masterMuteBtn.addEventListener('click', handleGlobalAudioToggle)
+  }
+  
+  if (masterVolumeSlider) {
+    masterVolumeSlider.addEventListener('input', (e) => {
+      const volume = parseInt((e.target as HTMLInputElement).value)
+      handleGlobalVolumeChange(volume)
+    })
+  }
+
   // Initial timeline display update
   updateTimelineDisplay()
   
@@ -315,11 +330,28 @@ function setupVideoControls(): void {
   const removeButtons = document.querySelectorAll('.remove-btn')
   removeButtons.forEach(button => {
     button.addEventListener('click', () => {
+      // Check if button is disabled
+      if (button.classList.contains('disabled')) {
+        console.log(`Remove button for ${button.getAttribute('data-plane')} is disabled - no video to remove`)
+        return
+      }
+      
       const planeName = button.getAttribute('data-plane')
       const input = document.querySelector(`.video-input[data-plane="${planeName}"]`) as HTMLInputElement
       
       if (planeName) {
         handleVideoRemove(planeName, input)
+      }
+    })
+  })
+  
+  // Handle speaker button clicks (per-plane audio toggle)
+  const speakerButtons = document.querySelectorAll('.speaker-btn')
+  speakerButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const planeName = button.getAttribute('data-plane')
+      if (planeName) {
+        handlePlaneAudioToggle(planeName, button as HTMLElement)
       }
     })
   })
@@ -447,10 +479,17 @@ async function handleAutoDetectVideos(files: FileList): Promise<void> {
       
       if (success) {
         successCount++
-        // Update input styling to show success
+        // Update input styling to show success (green)
         if (textInput) {
           textInput.style.borderColor = '#4ecdc4'
           textInput.style.backgroundColor = 'rgba(78, 205, 196, 0.1)'
+        }
+        // Update remove button state
+        updateRemoveButtonState(planeName)
+        // Initialize speaker button state (videos start muted by default)
+        const speakerButton = document.querySelector(`.speaker-btn[data-plane="${planeName}"]`) as HTMLElement
+        if (speakerButton) {
+          updateSpeakerButtonState(speakerButton, false) // Videos start muted
         }
         console.log(`✓ Successfully loaded ${file.name} on ${planeName}`)
       } else {
@@ -557,6 +596,13 @@ async function handleVideoRefreshFromFile(planeName: string, file: File): Promis
         input.style.borderColor = '#4ecdc4'
         input.style.backgroundColor = 'rgba(78, 205, 196, 0.1)'
       }
+      // Update remove button state
+      updateRemoveButtonState(planeName)
+      // Initialize speaker button state (videos start muted by default)
+      const speakerButton = document.querySelector(`.speaker-btn[data-plane="${planeName}"]`) as HTMLElement
+      if (speakerButton) {
+        updateSpeakerButtonState(speakerButton, false) // Videos start muted
+      }
       console.log(`Successfully loaded video file on ${planeName}`)
     } else {
       // Update input styling to show error
@@ -605,7 +651,126 @@ function handleVideoRemove(planeName: string, input: HTMLInputElement | null): v
     input.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
   }
   
+  // Update remove button state
+  updateRemoveButtonState(planeName)
+  
   console.log(`Video removed from ${planeName} and text input cleared`)
+}
+
+// Handle per-plane audio toggle
+function handlePlaneAudioToggle(planeName: string, button: HTMLElement): void {
+  const visualizer = (window as any).visualizer
+  if (!visualizer) {
+    console.error('Visualizer not found')
+    return
+  }
+
+  // Toggle the muted state of the plane's video
+  const isMuted = visualizer.getArena().togglePlaneAudio(planeName)
+  
+  // Update button appearance
+  updateSpeakerButtonState(button, !isMuted)
+  
+  console.log(`${planeName} audio ${isMuted ? 'muted' : 'unmuted'}`)
+}
+
+// Update speaker button visual state
+function updateSpeakerButtonState(button: HTMLElement, isUnmuted: boolean): void {
+  if (isUnmuted) {
+    button.classList.remove('muted')
+    button.textContent = '🔊'
+    button.title = button.title.replace('Unmute audio for', 'Mute audio for')
+  } else {
+    button.classList.add('muted')
+    button.textContent = '🔊' // Keep same icon, just add visual muted effect
+    button.title = button.title.replace('Mute audio for', 'Unmute audio for')
+  }
+}
+
+// Update remove button visual state
+function updateRemoveButtonState(planeName: string): void {
+  const removeButton = document.querySelector(`.remove-btn[data-plane="${planeName}"]`) as HTMLElement
+  if (!removeButton) return
+
+  const visualizer = (window as any).visualizer
+  if (!visualizer) return
+
+  // Check if the plane has a video loaded using the correct method name
+  const hasVideo = visualizer.getArena().isVideoLoadedOnPlane(planeName)
+  
+  if (hasVideo) {
+    removeButton.classList.remove('disabled')
+    removeButton.title = `Remove video from ${planeName}`
+  } else {
+    removeButton.classList.add('disabled')
+    removeButton.title = `No video loaded on ${planeName}`
+  }
+}
+
+// Update all remove button states
+function updateAllRemoveButtonStates(): void {
+  const planNames = ['A7', 'BIG-MAP', 'ICE', 'A1', 'A2', 'K2', 'K4', 'Skeptrons', 'Stairs']
+  planNames.forEach(planeName => {
+    updateRemoveButtonState(planeName)
+  })
+}
+
+// Handle global audio toggle
+function handleGlobalAudioToggle(): void {
+  const visualizer = (window as any).visualizer
+  if (!visualizer) {
+    console.error('Visualizer not found')
+    return
+  }
+
+  const masterMuteBtn = document.querySelector('.master-mute') as HTMLElement
+  if (!masterMuteBtn) return
+
+  // Toggle global mute state
+  const isGloballyMuted = visualizer.getArena().toggleGlobalAudio()
+  
+  // Update master mute button
+  updateMasterMuteButtonState(masterMuteBtn, !isGloballyMuted)
+  
+  // Update all individual speaker buttons to reflect the change
+  const speakerButtons = document.querySelectorAll('.speaker-btn')
+  speakerButtons.forEach(button => {
+    const planeName = button.getAttribute('data-plane')
+    if (planeName) {
+      const isPlaneUnmuted = !visualizer.getArena().isPlaneAudioMuted(planeName)
+      updateSpeakerButtonState(button as HTMLElement, isPlaneUnmuted)
+    }
+  })
+  
+  console.log(`Global audio ${isGloballyMuted ? 'muted' : 'unmuted'}`)
+}
+
+// Update master mute button visual state
+function updateMasterMuteButtonState(button: HTMLElement, isUnmuted: boolean): void {
+  if (isUnmuted) {
+    button.classList.remove('muted')
+    button.textContent = '🔊'
+    button.title = 'Mute All Videos'
+  } else {
+    button.classList.add('muted')
+    button.textContent = '🔇'
+    button.title = 'Unmute All Videos'
+  }
+}
+
+// Handle global volume change
+function handleGlobalVolumeChange(volume: number): void {
+  const visualizer = (window as any).visualizer
+  if (!visualizer) {
+    console.error('Visualizer not found')
+    return
+  }
+
+  // Set global volume (0-1 range)
+  const normalizedVolume = volume / 100
+  visualizer.getArena().setGlobalVolume(normalizedVolume)
+  
+  console.log(`Global volume set to ${Math.round(volume)}%`)
 }
 
 // Handle video refresh/load
@@ -652,6 +817,8 @@ async function handleVideoRefresh(planeName: string, url: string): Promise<void>
           input.style.borderColor = '#4ecdc4'
           input.style.backgroundColor = 'rgba(78, 205, 196, 0.1)'
         }
+        // Update remove button state
+        updateRemoveButtonState(planeName)
         console.log(`Successfully loaded video on ${planeName}`)
       } else {
         // Update input styling to show error
@@ -671,6 +838,8 @@ async function handleVideoRefresh(planeName: string, url: string): Promise<void>
         input.style.borderColor = '#444'
         input.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
       }
+      // Update remove button state
+      updateRemoveButtonState(planeName)
     }
   } catch (error) {
     console.error(`Error handling video for ${planeName}:`, error)
@@ -750,6 +919,11 @@ function init(): void {
 
   // Add timeline control functionality
   setupTimelineControls()
+  
+  // Initialize remove button states after a brief delay to ensure visualizer is ready
+  setTimeout(() => {
+    updateAllRemoveButtonStates()
+  }, 200)
 
   // Add to window for debugging
   ;(window as any).THREE = THREE
