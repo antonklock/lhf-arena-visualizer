@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { Label2DManager } from './Label2DManager'
 
 interface PlaneConfig {
   name: string
@@ -23,6 +24,7 @@ export class Arena {
   private gltfLoader: GLTFLoader = new GLTFLoader()
   private currentModelVersion: number = 3
   private readonly MODEL_VERSION_STORAGE_KEY = 'arena-model-version'
+  private label2DManager: Label2DManager | null = null
   
   // Store original materials for proper restoration
   private originalMaterials: Map<THREE.Mesh, THREE.Material | THREE.Material[]> = new Map()
@@ -139,6 +141,8 @@ export class Arena {
     const gridHelper = new THREE.GridHelper(60, 30, 0x444444, 0x222222)
     gridHelper.position.y = 0
     this.group.add(gridHelper)
+    
+    console.log('2D planes created, ready to initialize labels')
   }
 
   private calculateTightPositions(scaleFactor: number): Array<{x: number, z: number}> {
@@ -345,6 +349,31 @@ export class Arena {
   }
 
 
+  // Helper method to clear material from a specific plane without affecting video resources
+  private clearMaterialFromSpecificPlane(plane: THREE.Mesh, planeName: string): void {
+    // Determine original color based on plane name
+    let originalColor = 0x808080 // Default gray
+    const planeConfig = this.planeConfigs.find(config => config.name === planeName)
+    if (planeConfig) {
+      originalColor = planeConfig.color
+    }
+    
+    // Special handling for A7 and BIG-MAP planes
+    if (planeName === 'A7') {
+      originalColor = 0xff6b6b // A7 color
+    } else if (planeName === 'BIG-MAP') {
+      originalColor = 0x4ecdc4 // BIG-MAP color
+    }
+    
+    // Create new material and apply it
+    const shouldCullBackfaces = planeName === 'A7' || planeName === 'BIG-MAP'
+    plane.material = new THREE.MeshPhongMaterial({
+      color: originalColor,
+      transparent: false,
+      side: shouldCullBackfaces ? THREE.FrontSide : THREE.DoubleSide
+    })
+  }
+
   public clearVideoFromPlane(planeName: string): void {
     // Handle 2D plane
     const plane = this.planeMap.get(planeName)
@@ -527,7 +556,7 @@ export class Arena {
       currentTime,
       duration,
       isPlaying,
-      videoCount: allVideos.length
+      videoCount: this.videoElements.size // Count unique plane names, not individual video elements
     }
   }
 
@@ -537,6 +566,35 @@ export class Arena {
 
   public getGroup(): THREE.Group {
     return this.group
+  }
+
+  // 2D Label management methods
+  public initialize2DLabels(scene: THREE.Scene): void {
+    if (!this.label2DManager) {
+      this.label2DManager = new Label2DManager(scene)
+      this.label2DManager.createLabelsForPlanes(this.planeMap)
+      // Initially hide labels (they'll be shown when switching to 2D mode)
+      this.label2DManager.setVisible(false)
+      console.log('2D labels initialized')
+    }
+  }
+
+  public set2DCamera(camera: THREE.OrthographicCamera): void {
+    if (this.label2DManager) {
+      this.label2DManager.setCamera2D(camera)
+    }
+  }
+
+  public update2DLabelScales(): void {
+    if (this.label2DManager) {
+      this.label2DManager.updateLabelScales()
+    }
+  }
+
+  public set2DLabelsVisible(visible: boolean): void {
+    if (this.label2DManager) {
+      this.label2DManager.setVisible(visible)
+    }
   }
 
   // Mode switching methods
@@ -787,6 +845,9 @@ export class Arena {
       this.model3D.visible = false
     }
     
+    // Show 2D labels
+    this.set2DLabelsVisible(true)
+    
     console.log('Switched to 2D mode')
   }
 
@@ -801,56 +862,212 @@ export class Arena {
       this.model3D.visible = true
     }
     
+    // Hide 2D labels
+    this.set2DLabelsVisible(false)
+    
     console.log('Switched to 3D mode')
   }
 
   // Override loadVideoOnPlane to work with both modes
   public async loadVideoOnPlane(planeName: string, videoSource: string | File): Promise<boolean> {
-    // Load video on both 2D and 3D planes if they exist
-    const plane2D = this.planeMap.get(planeName)
+    // Clear any existing video for this plane first
+    this.clearVideoFromPlane(planeName)
     
+    // Create a single video element for this plane
+    const video = document.createElement('video')
+    video.loop = true
+    video.muted = true // Required for autoplay
+    video.playsInline = true
+    video.preload = 'metadata'
+
+    // Handle File objects vs URLs differently
+    if (videoSource instanceof File) {
+      const objectUrl = URL.createObjectURL(videoSource)
+      video.src = objectUrl
+      video.dataset.objectUrl = objectUrl
+    } else {
+      video.crossOrigin = 'anonymous'
+      video.src = videoSource
+    }
+
+    // Set up video loading promise
+    const loadPromise = new Promise<boolean>((resolve) => {
+      const onLoadedMetadata = () => {
+        video.removeEventListener('loadedmetadata', onLoadedMetadata)
+        video.removeEventListener('error', onError)
+        resolve(true)
+      }
+
+      const onError = (event: Event) => {
+        video.removeEventListener('loadedmetadata', onLoadedMetadata)
+        video.removeEventListener('error', onError)
+        console.error(`Failed to load video:`, videoSource, event)
+        resolve(false)
+      }
+
+      video.addEventListener('loadedmetadata', onLoadedMetadata)
+      video.addEventListener('error', onError)
+      video.load()
+    })
+
+    const loaded = await loadPromise
+    if (!loaded) {
+      return false
+    }
+
+    // Create a single video texture that will be shared
+    const videoTexture = new THREE.VideoTexture(video)
+    videoTexture.minFilter = THREE.LinearFilter
+    videoTexture.magFilter = THREE.LinearFilter
+    videoTexture.flipY = false
+
+    // Apply UV mapping based on plane config
+    this.applyUVMapping(videoTexture, planeName, video)
+    
+    // Set texture properties
+    videoTexture.wrapS = THREE.ClampToEdgeWrap
+    videoTexture.wrapT = THREE.ClampToEdgeWrap
+    videoTexture.generateMipmaps = false
+    videoTexture.needsUpdate = true
+
+    // Apply the shared texture to all relevant planes
     let success = false
     
+    // Apply to 2D plane if it exists
+    const plane2D = this.planeMap.get(planeName)
     if (plane2D) {
-      success = await this.loadVideoOnSpecificPlane(plane2D, planeName, videoSource) || success
+      this.applyVideoMaterialToPlane(plane2D, videoTexture, planeName)
+      success = true
     }
     
-    // Handle A7 specially - apply to all A7 parts
+    // Apply to 3D planes
     if (planeName === 'A7' && this.a7Parts.length > 0) {
-      console.log(`Loading video on all ${this.a7Parts.length} A7 parts`)
-      // Clear video resources once before loading on all parts
-      this.clearVideoFromPlane(planeName)
-      for (const a7Part of this.a7Parts) {
-        const partSuccess = await this.loadVideoOnSpecificPlane(a7Part, planeName, videoSource, true) // Skip clearing for individual parts
-        success = partSuccess || success
-      }
-    }
-    // Handle BIG-MAP specially - it maps to A0, A6, A8, A9 in 3D mode
-    else if (planeName === 'BIG-MAP' && this.bigMapPlanes.length > 0) {
-      console.log(`Loading BIG-MAP video on all ${this.bigMapPlanes.length} BIG-MAP parts`)
-      // Clear video resources once before loading on all parts
-      this.clearVideoFromPlane(planeName)
-      for (const bigMapPart of this.bigMapPlanes) {
-        const partSuccess = await this.loadVideoOnSpecificPlane(bigMapPart, planeName, videoSource, true) // Skip clearing for individual parts
-        success = partSuccess || success
-      }
-    }
-    // Handle other 3D planes normally
-    else {
+      console.log(`Applying shared video texture to all ${this.a7Parts.length} A7 parts`)
+      this.a7Parts.forEach(part => {
+        this.applyVideoMaterialToPlane(part, videoTexture, planeName)
+      })
+      success = true
+    } else if (planeName === 'BIG-MAP' && this.bigMapPlanes.length > 0) {
+      console.log(`Applying shared video texture to all ${this.bigMapPlanes.length} BIG-MAP parts`)
+      this.bigMapPlanes.forEach(part => {
+        this.applyVideoMaterialToPlane(part, videoTexture, planeName)
+      })
+      success = true
+    } else {
       const plane3D = this.model3DPlanes.get(planeName)
       if (plane3D) {
-        success = await this.loadVideoOnSpecificPlane(plane3D, planeName, videoSource) || success
+        this.applyVideoMaterialToPlane(plane3D, videoTexture, planeName)
+        success = true
       }
+    }
+    
+    if (success) {
+      // Store single video element and texture
+      this.videoElements.set(planeName, [video])
+      this.videoTextures.set(planeName, [videoTexture])
+      
+      console.log(`Video loaded and applied to ${planeName}`, {
+        duration: video.duration,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        currentTime: video.currentTime,
+        paused: video.paused,
+        readyState: video.readyState
+      })
     }
     
     return success
+  }
+
+  // Helper method to apply UV mapping to a video texture
+  private applyUVMapping(videoTexture: THREE.VideoTexture, planeName: string, video: HTMLVideoElement): void {
+    const planeConfig = this.planeConfigs.find(config => config.name === planeName)
+    
+    if (planeConfig) {
+      const originalWidth = planeConfig.width
+      const originalHeight = planeConfig.height
+      const originalAspectRatio = originalWidth / originalHeight
+      
+      // Get actual video aspect ratio from the video element
+      const videoAspectRatio = video.videoWidth / video.videoHeight
+      
+      console.log(`UV Mapping for ${planeName}: Original ${originalAspectRatio.toFixed(2)}:1, Video ${videoAspectRatio.toFixed(2)}:1`)
+      
+      // Apply UV mapping if the video aspect ratio is significantly different from original
+      if (Math.abs(videoAspectRatio - originalAspectRatio) > 0.1) {
+        if (videoAspectRatio < originalAspectRatio) {
+          // Video is taller than needed - crop vertically (show horizontal slice)
+          const heightScale = videoAspectRatio / originalAspectRatio
+          const heightOffset = (1 - heightScale) / 2
+          
+          // For very extreme ratios, use a larger minimum scale to ensure visibility
+          let minScale = 0.001
+          if (planeName === 'A7' || planeName === 'A1' || planeName === 'A2') {
+            minScale = 0.1 // Very extreme ratios
+          } else if (planeName === 'K2' || planeName === 'K4') {
+            minScale = 0.05 // K2/K4 need better visibility than default
+          }
+          
+          const actualScale = Math.max(minScale, heightScale)
+          const actualOffset = actualScale === minScale ? (1 - actualScale) / 2 : heightOffset
+          
+          console.log(`Vertical crop for ${planeName}: original scale=${heightScale.toFixed(3)}, actual scale=${actualScale.toFixed(3)}, offset=${actualOffset.toFixed(3)}`)
+          
+          videoTexture.repeat.set(1, actualScale)
+          videoTexture.offset.set(0, actualOffset)
+        } else {
+          // Video is wider than needed - crop horizontally (show vertical slice)
+          const widthScale = originalAspectRatio / videoAspectRatio
+          const widthOffset = (1 - widthScale) / 2
+          
+          console.log(`Horizontal crop for ${planeName}: scale=${widthScale.toFixed(3)}, offset=${widthOffset.toFixed(3)}`)
+          
+          videoTexture.repeat.set(Math.max(0.001, widthScale), 1) // Prevent zero scale
+          videoTexture.offset.set(widthOffset, 0)
+        }
+      } else {
+        // Aspect ratios are similar, use full texture
+        console.log(`No UV mapping needed for ${planeName}`)
+        videoTexture.repeat.set(1, 1)
+        videoTexture.offset.set(0, 0)
+      }
+    } else {
+      // Fallback: use full texture if no config found
+      console.log(`No plane config found for ${planeName}, using full texture`)
+      videoTexture.repeat.set(1, 1)
+      videoTexture.offset.set(0, 0)
+    }
+  }
+
+  // Helper method to apply video material to a specific plane
+  private applyVideoMaterialToPlane(plane: THREE.Mesh, videoTexture: THREE.VideoTexture, planeName: string): void {
+    const shouldCullBackfaces = planeName === 'A7' || planeName === 'BIG-MAP'
+    const videoMaterial = new THREE.MeshPhongMaterial({
+      map: videoTexture,
+      emissiveMap: videoTexture,
+      emissive: new THREE.Color(0xffffff),
+      emissiveIntensity: 0.9,
+      transparent: true,
+      opacity: 0.9,
+      side: shouldCullBackfaces ? THREE.FrontSide : THREE.DoubleSide
+    })
+
+    plane.material = videoMaterial
   }
 
   private async loadVideoOnSpecificPlane(plane: THREE.Mesh, planeName: string, videoSource: string | File, skipClear: boolean = false): Promise<boolean> {
     try {
       // Clean up existing video if any (unless specifically skipped)
       if (!skipClear) {
-        this.clearVideoFromPlane(planeName)
+        // For 3D planes, only clear the specific plane material, not all video resources
+        const is3DPlane = this.model3DPlanes.has(planeName) || this.a7Parts.includes(plane) || this.bigMapPlanes.includes(plane)
+        if (is3DPlane) {
+          // Just clear the material on this specific plane, don't call full clearVideoFromPlane
+          this.clearMaterialFromSpecificPlane(plane, planeName)
+        } else {
+          // For 2D planes, use the full clear method
+          this.clearVideoFromPlane(planeName)
+        }
       }
 
       // Create video element

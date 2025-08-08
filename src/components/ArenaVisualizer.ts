@@ -46,6 +46,9 @@ export class ArenaVisualizer {
     // Initialize arena
     this.arena = new Arena()
     this.scene.add(this.arena.getGroup())
+    
+    // Initialize 2D labels (they'll be hidden initially)
+    this.arena.initialize2DLabels(this.scene)
   }
 
   private initScene(): void {
