@@ -11,6 +11,9 @@ export class Arena {
   private group: THREE.Group
   private time: number = 0
   private planes: THREE.Mesh[] = []
+  private planeMap: Map<string, THREE.Mesh> = new Map()
+  private videoElements: Map<string, HTMLVideoElement> = new Map()
+  private videoTextures: Map<string, THREE.VideoTexture> = new Map()
 
   // Plane configurations with exact ratios
   private planeConfigs: PlaneConfig[] = [
@@ -82,6 +85,7 @@ export class Arena {
 
       // Store reference and add to scene
       this.planes.push(plane)
+      this.planeMap.set(config.name, plane)
       this.group.add(plane)
 
       // Log the plane information to console for reference
@@ -168,6 +172,147 @@ export class Arena {
   public update(deltaTime: number): void {
     this.time += deltaTime
     // Remove the pulsing animation to avoid interfering with highlight system
+  }
+
+  public async loadVideoOnPlane(planeName: string, videoSource: string | File): Promise<boolean> {
+    try {
+      const plane = this.planeMap.get(planeName)
+      if (!plane) {
+        console.error(`Plane ${planeName} not found`)
+        return false
+      }
+
+      // Clean up existing video if any
+      this.clearVideoFromPlane(planeName)
+
+      // Create video element
+      const video = document.createElement('video')
+      video.loop = true
+      video.muted = true // Required for autoplay
+      video.playsInline = true
+      video.preload = 'metadata'
+
+      // Handle File objects vs URLs differently
+      if (videoSource instanceof File) {
+        // For File objects, we don't need crossOrigin
+        const objectUrl = URL.createObjectURL(videoSource)
+        video.src = objectUrl
+        
+        // Store object URL for cleanup
+        video.dataset.objectUrl = objectUrl
+      } else {
+        // For URLs, set crossOrigin
+        video.crossOrigin = 'anonymous'
+        video.src = videoSource
+      }
+
+      // Set up video loading promise
+      const loadPromise = new Promise<boolean>((resolve) => {
+        const onCanPlay = () => {
+          video.removeEventListener('canplay', onCanPlay)
+          video.removeEventListener('error', onError)
+          resolve(true)
+        }
+
+        const onError = () => {
+          video.removeEventListener('canplay', onCanPlay)
+          video.removeEventListener('error', onError)
+          console.error(`Failed to load video:`, videoSource)
+          resolve(false)
+        }
+
+        video.addEventListener('canplay', onCanPlay)
+        video.addEventListener('error', onError)
+        
+        // Load the video
+        video.load()
+      })
+
+      const loaded = await loadPromise
+      if (!loaded) {
+        return false
+      }
+
+      // Create video texture
+      const videoTexture = new THREE.VideoTexture(video)
+      videoTexture.minFilter = THREE.LinearFilter
+      videoTexture.magFilter = THREE.LinearFilter
+      videoTexture.flipY = false
+
+      // Create new material with video texture
+      const videoMaterial = new THREE.MeshPhongMaterial({
+        map: videoTexture,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+      })
+
+      // Apply the video material to the plane
+      plane.material = videoMaterial
+
+      // Store references
+      this.videoElements.set(planeName, video)
+      this.videoTextures.set(planeName, videoTexture)
+
+      // Start playing the video
+      try {
+        await video.play()
+        console.log(`Video loaded and playing on plane: ${planeName}`)
+      } catch (playError) {
+        console.warn(`Video loaded but couldn't autoplay on plane: ${planeName}`, playError)
+      }
+
+      return true
+    } catch (error) {
+      console.error(`Error loading video on plane ${planeName}:`, error)
+      return false
+    }
+  }
+
+  public clearVideoFromPlane(planeName: string): void {
+    const plane = this.planeMap.get(planeName)
+    if (!plane) {
+      console.error(`Plane ${planeName} not found`)
+      return
+    }
+
+    // Get original color from userData
+    const originalColor = plane.userData.originalColor
+
+    // Restore original material
+    const originalMaterial = new THREE.MeshPhongMaterial({
+      color: originalColor,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    })
+
+    plane.material = originalMaterial
+
+    // Clean up video resources
+    const video = this.videoElements.get(planeName)
+    if (video) {
+      video.pause()
+      video.src = ''
+      video.load() // This helps free up memory
+      this.videoElements.delete(planeName)
+    }
+
+    const texture = this.videoTextures.get(planeName)
+    if (texture) {
+      texture.dispose()
+      this.videoTextures.delete(planeName)
+    }
+
+    console.log(`Video cleared from plane: ${planeName}`)
+  }
+
+  public isVideoLoadedOnPlane(planeName: string): boolean {
+    return this.videoElements.has(planeName)
+  }
+
+  public getPlaneNames(): string[] {
+    return Array.from(this.planeMap.keys())
   }
 
   public getGroup(): THREE.Group {

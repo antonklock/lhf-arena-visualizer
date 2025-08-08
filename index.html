@@ -55,12 +55,25 @@
         font-size: 12px;
         max-width: 300px;
         font-family: 'Courier New', monospace;
-        transition: all 0.3s ease;
+        transition: max-height 0.3s ease;
+        margin-bottom: 10px;
+        overflow: hidden;
       }
       
       .plane-info.collapsed {
-        max-height: 40px;
-        overflow: hidden;
+        max-height: 25px;
+      }
+      
+      .plane-info .plane-item {
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      
+      .plane-info.collapsed .plane-item {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
       }
       
       .plane-info h3 {
@@ -72,6 +85,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 10px;
       }
       
       .plane-info.collapsed h3 {
@@ -90,24 +104,36 @@
       
       .videos-panel {
         position: absolute;
-        bottom: 10px;
+        top: 10px;
         right: 10px;
         color: white;
-        z-index: 100;
+        z-index: 99;
         background: rgba(0, 0, 0, 0.8);
         padding: 15px;
         border-radius: 5px;
         font-size: 12px;
-        max-width: 350px;
+        max-width: 300px;
         font-family: 'Courier New', monospace;
-        transition: all 0.3s ease;
+        transition: max-height 0.3s ease, transform 0.3s ease;
         max-height: 400px;
-        overflow-y: auto;
+        overflow: hidden;
+        transform: translateY(var(--plane-info-height, 50px));
       }
       
       .videos-panel.collapsed {
-        max-height: 40px;
-        overflow: hidden;
+        max-height: 25px;
+      }
+      
+      .videos-panel .video-input-group {
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      
+      .videos-panel.collapsed .video-input-group {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
       }
       
       .videos-panel h3 {
@@ -119,6 +145,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 10px;
       }
       
       .videos-panel.collapsed h3 {
@@ -204,6 +231,31 @@
       .refresh-btn:active {
         transform: scale(0.95);
       }
+      
+      .file-btn {
+        width: 24px;
+        height: 24px;
+        background: rgba(253, 121, 168, 0.2);
+        border: 1px solid #fd79a8;
+        border-radius: 3px;
+        color: #fd79a8;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        transition: all 0.2s;
+        margin-right: 4px;
+      }
+      
+      .file-btn:hover {
+        background: rgba(253, 121, 168, 0.4);
+        transform: scale(1.1);
+      }
+      
+      .file-btn:active {
+        transform: scale(0.95);
+      }
     </style>
   </head>
   <body>
@@ -272,7 +324,9 @@
         
         <div class="video-input-group">
           <div class="video-input-label">ICE:</div>
-          <input type="text" class="video-input" data-plane="ICE" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="ICE" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="ICE" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="ICE" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="ICE" title="Refresh ICE">⟳</button>
         </div>
         
