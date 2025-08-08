@@ -36,6 +36,149 @@ function setupCollapsiblePanels(): void {
   window.addEventListener('resize', updateVideosPanelPosition)
 }
 
+// Setup timeline controls
+function setupTimelineControls(): void {
+  const playBtn = document.querySelector('.timeline-btn.play') as HTMLElement
+  const pauseBtn = document.querySelector('.timeline-btn.pause') as HTMLElement
+  const stopBtn = document.querySelector('.timeline-btn.stop') as HTMLElement
+  const timelineTrack = document.querySelector('.timeline-track') as HTMLElement
+  const timelineProgress = document.querySelector('.timeline-progress') as HTMLElement
+  const timelineHandle = document.querySelector('.timeline-handle') as HTMLElement
+  const currentTimeSpan = document.querySelector('.current-time') as HTMLElement
+  const totalTimeSpan = document.querySelector('.total-time') as HTMLElement
+  const videoCountSpan = document.querySelector('.video-count') as HTMLElement
+
+  let isDragging = false
+  let animationFrameId: number | null = null
+
+  // Get visualizer instance
+  const getVisualizer = () => (window as any).visualizer
+
+  // Format time helper
+  const formatTime = (seconds: number): string => {
+    if (isNaN(seconds) || seconds < 0) return '0:00'
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Update timeline display
+  const updateTimelineDisplay = () => {
+    const visualizer = getVisualizer()
+    if (!visualizer) return
+
+    const info = visualizer.getArena().getVideoPlaybackInfo()
+    
+    // Update time displays
+    currentTimeSpan.textContent = formatTime(info.currentTime)
+    totalTimeSpan.textContent = formatTime(info.duration)
+    videoCountSpan.textContent = `${info.videoCount} video${info.videoCount !== 1 ? 's' : ''}`
+
+    // Update progress bar
+    if (info.duration > 0 && !isDragging) {
+      const percentage = (info.currentTime / info.duration) * 100
+      timelineProgress.style.width = `${percentage}%`
+      timelineHandle.style.left = `${percentage}%`
+    }
+
+    // Continue updating if videos are playing
+    if (info.isPlaying && info.videoCount > 0) {
+      animationFrameId = requestAnimationFrame(updateTimelineDisplay)
+    } else {
+      animationFrameId = null
+    }
+  }
+
+  // Play button
+  playBtn.addEventListener('click', () => {
+    const visualizer = getVisualizer()
+    if (visualizer) {
+      visualizer.getArena().playAllVideos()
+      // Start timeline updates
+      if (!animationFrameId) {
+        updateTimelineDisplay()
+      }
+    }
+  })
+
+  // Pause button
+  pauseBtn.addEventListener('click', () => {
+    const visualizer = getVisualizer()
+    if (visualizer) {
+      visualizer.getArena().pauseAllVideos()
+      // Stop timeline updates
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+        animationFrameId = null
+      }
+    }
+  })
+
+  // Stop button
+  stopBtn.addEventListener('click', () => {
+    const visualizer = getVisualizer()
+    if (visualizer) {
+      visualizer.getArena().stopAndRewindAllVideos()
+      // Stop timeline updates and reset display
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+        animationFrameId = null
+      }
+      // Reset timeline to beginning
+      timelineProgress.style.width = '0%'
+      timelineHandle.style.left = '0%'
+      setTimeout(updateTimelineDisplay, 100) // Brief delay to let videos reset
+    }
+  })
+
+  // Timeline seeking
+  const handleSeek = (event: MouseEvent) => {
+    const rect = timelineTrack.getBoundingClientRect()
+    const percentage = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100))
+    
+    const visualizer = getVisualizer()
+    if (visualizer) {
+      visualizer.getArena().seekAllVideos(percentage)
+      
+      // Update UI immediately
+      timelineProgress.style.width = `${percentage}%`
+      timelineHandle.style.left = `${percentage}%`
+    }
+  }
+
+  // Mouse events for timeline
+  timelineTrack.addEventListener('mousedown', (e) => {
+    isDragging = true
+    handleSeek(e)
+  })
+
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      handleSeek(e)
+    }
+  })
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false
+      // Resume timeline updates if videos are playing
+      const visualizer = getVisualizer()
+      if (visualizer) {
+        const info = visualizer.getArena().getVideoPlaybackInfo()
+        if (info.isPlaying && !animationFrameId) {
+          updateTimelineDisplay()
+        }
+      }
+    }
+  })
+
+  // Initial timeline display update
+  updateTimelineDisplay()
+  
+  // Update display when videos are loaded/unloaded
+  setInterval(updateTimelineDisplay, 1000) // Update every second as backup
+}
+
 // Setup video controls
 function setupVideoControls(): void {
   // Handle refresh button clicks
@@ -273,6 +416,9 @@ function init(): void {
   
   // Add video input functionality
   setupVideoControls()
+
+  // Add timeline control functionality
+  setupTimelineControls()
 
   // Add to window for debugging
   ;(window as any).THREE = THREE

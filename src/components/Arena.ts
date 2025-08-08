@@ -46,8 +46,13 @@ export class Arena {
       const scaledWidth = config.width * scaleFactor
       const scaledHeight = config.height * scaleFactor
 
-      // Create plane geometry
-      const geometry = new THREE.PlaneGeometry(scaledWidth, scaledHeight)
+      // Ensure minimum visibility for very thin planes
+      const minSize = 0.5 // Minimum dimension for visibility
+      const visibleWidth = Math.max(scaledWidth, minSize)
+      const visibleHeight = Math.max(scaledHeight, minSize)
+
+      // Create plane geometry with minimum size enforced
+      const geometry = new THREE.PlaneGeometry(visibleWidth, visibleHeight)
       
       // Create material with distinct color for each plane
       const material = new THREE.MeshPhongMaterial({ 
@@ -79,6 +84,7 @@ export class Arena {
         originalDimensions: `${config.width}x${config.height}`,
         ratio: (config.width / config.height).toFixed(2),
         scaledDimensions: `${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)}`,
+        visibleDimensions: `${visibleWidth.toFixed(1)}x${visibleHeight.toFixed(1)}`,
         originalOpacity: 0.8,
         originalColor: config.color
       }
@@ -89,7 +95,7 @@ export class Arena {
       this.group.add(plane)
 
       // Log the plane information to console for reference
-      console.log(`${config.name}: ${config.width}x${config.height} (ratio: ${(config.width / config.height).toFixed(2)}) - scaled: ${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)})`)
+      console.log(`${config.name}: ${config.width}x${config.height} (ratio: ${(config.width / config.height).toFixed(2)}) - scaled: ${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)} - visible: ${visibleWidth.toFixed(1)}x${visibleHeight.toFixed(1)}`)
     })
 
     // Add a subtle grid helper for reference
@@ -206,22 +212,22 @@ export class Arena {
         video.src = videoSource
       }
 
-      // Set up video loading promise
+      // Set up video loading promise - wait for loadedmetadata to ensure we have video dimensions
       const loadPromise = new Promise<boolean>((resolve) => {
-        const onCanPlay = () => {
-          video.removeEventListener('canplay', onCanPlay)
+        const onLoadedMetadata = () => {
+          video.removeEventListener('loadedmetadata', onLoadedMetadata)
           video.removeEventListener('error', onError)
           resolve(true)
         }
 
-        const onError = () => {
-          video.removeEventListener('canplay', onCanPlay)
+        const onError = (event: Event) => {
+          video.removeEventListener('loadedmetadata', onLoadedMetadata)
           video.removeEventListener('error', onError)
-          console.error(`Failed to load video:`, videoSource)
+          console.error(`Failed to load video:`, videoSource, event)
           resolve(false)
         }
 
-        video.addEventListener('canplay', onCanPlay)
+        video.addEventListener('loadedmetadata', onLoadedMetadata)
         video.addEventListener('error', onError)
         
         // Load the video
@@ -239,6 +245,55 @@ export class Arena {
       videoTexture.magFilter = THREE.LinearFilter
       videoTexture.flipY = false
 
+      // Calculate UV mapping for the video slice
+      const originalWidth = parseFloat(plane.userData.originalDimensions.split('x')[0])
+      const originalHeight = parseFloat(plane.userData.originalDimensions.split('x')[1])
+      const originalAspectRatio = originalWidth / originalHeight
+      
+      // Get actual video aspect ratio from the video element
+      const videoAspectRatio = video.videoWidth / video.videoHeight
+      
+      console.log(`UV Mapping for ${planeName}: Original ${originalAspectRatio.toFixed(2)}:1, Video ${videoAspectRatio.toFixed(2)}:1`)
+      
+      // Apply UV mapping if the video aspect ratio is significantly different from original
+      if (Math.abs(videoAspectRatio - originalAspectRatio) > 0.1) {
+        if (videoAspectRatio < originalAspectRatio) {
+          // Video is taller than needed - crop vertically (show horizontal slice)
+          const heightScale = videoAspectRatio / originalAspectRatio
+          const heightOffset = (1 - heightScale) / 2
+          
+          // For very extreme ratios, use a larger minimum scale to ensure visibility
+          const minScale = planeName === 'A7' || planeName === 'A1' || planeName === 'A2' ? 0.1 : 0.001
+          const actualScale = Math.max(minScale, heightScale)
+          const actualOffset = actualScale === minScale ? (1 - actualScale) / 2 : heightOffset
+          
+          console.log(`Vertical crop for ${planeName}: original scale=${heightScale.toFixed(3)}, actual scale=${actualScale.toFixed(3)}, offset=${actualOffset.toFixed(3)}`)
+          
+          videoTexture.repeat.set(1, actualScale)
+          videoTexture.offset.set(0, actualOffset)
+        } else {
+          // Video is wider than needed - crop horizontally (show vertical slice)
+          const widthScale = originalAspectRatio / videoAspectRatio
+          const widthOffset = (1 - widthScale) / 2
+          
+          console.log(`Horizontal crop for ${planeName}: scale=${widthScale.toFixed(3)}, offset=${widthOffset.toFixed(3)}`)
+          
+          videoTexture.repeat.set(Math.max(0.001, widthScale), 1) // Prevent zero scale
+          videoTexture.offset.set(widthOffset, 0)
+        }
+      } else {
+        // Aspect ratios are similar, use full texture
+        console.log(`No UV mapping needed for ${planeName}`)
+        videoTexture.repeat.set(1, 1)
+        videoTexture.offset.set(0, 0)
+      }
+      
+      // Set proper texture wrapping and parameters to avoid WebGL warnings
+      videoTexture.wrapS = THREE.ClampToEdgeWrap
+      videoTexture.wrapT = THREE.ClampToEdgeWrap
+      videoTexture.generateMipmaps = false
+      videoTexture.needsUpdate = true
+
       // Create new material with video texture
       const videoMaterial = new THREE.MeshPhongMaterial({
         map: videoTexture,
@@ -249,6 +304,19 @@ export class Arena {
 
       // Apply the video material to the plane
       plane.material = videoMaterial
+      
+      // Debug: Log plane geometry and position for troubleshooting
+      console.log(`Applied video to ${planeName} - Plane geometry:`, {
+        width: plane.geometry.parameters?.width || 'unknown',
+        height: plane.geometry.parameters?.height || 'unknown',
+        position: { x: plane.position.x, y: plane.position.y, z: plane.position.z },
+        visible: plane.visible,
+        material: {
+          opacity: videoMaterial.opacity,
+          transparent: videoMaterial.transparent,
+          side: videoMaterial.side
+        }
+      })
 
       // Store references
       this.videoElements.set(planeName, video)
@@ -257,9 +325,25 @@ export class Arena {
       // Start playing the video
       try {
         await video.play()
-        console.log(`Video loaded and playing on plane: ${planeName}`)
+        console.log(`Video loaded and playing on plane: ${planeName}`, {
+          duration: video.duration,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          currentTime: video.currentTime,
+          paused: video.paused,
+          readyState: video.readyState
+        })
       } catch (playError) {
         console.warn(`Video loaded but couldn't autoplay on plane: ${planeName}`, playError)
+        // Try to play again after a short delay
+        setTimeout(async () => {
+          try {
+            await video.play()
+            console.log(`Video started playing after retry on plane: ${planeName}`)
+          } catch (retryError) {
+            console.error(`Failed to play video after retry on plane: ${planeName}`, retryError)
+          }
+        }, 100)
       }
 
       return true
@@ -293,6 +377,13 @@ export class Arena {
     const video = this.videoElements.get(planeName)
     if (video) {
       video.pause()
+      
+      // Clean up object URL if it exists
+      if (video.dataset.objectUrl) {
+        URL.revokeObjectURL(video.dataset.objectUrl)
+        delete video.dataset.objectUrl
+      }
+      
       video.src = ''
       video.load() // This helps free up memory
       this.videoElements.delete(planeName)
@@ -313,6 +404,93 @@ export class Arena {
 
   public getPlaneNames(): string[] {
     return Array.from(this.planeMap.keys())
+  }
+
+  // Timeline control methods
+  public playAllVideos(): void {
+    this.videoElements.forEach((video, planeName) => {
+      try {
+        // Only try to play if the video is paused and has a valid source
+        if (video.paused && video.src && !video.src.includes('blob:')) {
+          video.play()
+          console.log(`Playing video on plane: ${planeName}`)
+        } else if (video.paused && video.src && video.src.includes('blob:')) {
+          // For blob URLs, check if the object URL is still valid
+          if (video.dataset.objectUrl) {
+            video.play()
+            console.log(`Playing blob video on plane: ${planeName}`)
+          } else {
+            console.warn(`Blob URL invalid for video on plane: ${planeName}`)
+          }
+        } else if (!video.paused) {
+          console.log(`Video already playing on plane: ${planeName}`)
+        } else {
+          console.warn(`No valid source for video on plane: ${planeName}`, { src: video.src, readyState: video.readyState })
+        }
+      } catch (error) {
+        console.warn(`Failed to play video on plane ${planeName}:`, error)
+      }
+    })
+  }
+
+  public pauseAllVideos(): void {
+    this.videoElements.forEach((video, planeName) => {
+      try {
+        video.pause()
+        console.log(`Paused video on plane: ${planeName}`)
+      } catch (error) {
+        console.warn(`Failed to pause video on plane ${planeName}:`, error)
+      }
+    })
+  }
+
+  public stopAndRewindAllVideos(): void {
+    this.videoElements.forEach((video, planeName) => {
+      try {
+        video.pause()
+        video.currentTime = 0
+        console.log(`Stopped and rewound video on plane: ${planeName}`)
+      } catch (error) {
+        console.warn(`Failed to stop video on plane ${planeName}:`, error)
+      }
+    })
+  }
+
+  public seekAllVideos(percentage: number): void {
+    this.videoElements.forEach((video, planeName) => {
+      try {
+        if (video.duration && !isNaN(video.duration)) {
+          video.currentTime = (percentage / 100) * video.duration
+        }
+      } catch (error) {
+        console.warn(`Failed to seek video on plane ${planeName}:`, error)
+      }
+    })
+  }
+
+  public getVideoPlaybackInfo(): { currentTime: number; duration: number; isPlaying: boolean; videoCount: number } {
+    const videos = Array.from(this.videoElements.values())
+    
+    if (videos.length === 0) {
+      return { currentTime: 0, duration: 0, isPlaying: false, videoCount: 0 }
+    }
+
+    // Use the first video as reference for timing
+    const referenceVideo = videos[0]
+    const currentTime = referenceVideo.currentTime || 0
+    const duration = referenceVideo.duration || 0
+    const isPlaying = !referenceVideo.paused && !referenceVideo.ended
+
+    return {
+      currentTime,
+      duration,
+      isPlaying,
+      videoCount: videos.length
+    }
+  }
+
+  public getLoadedVideoCount(): number {
+    return this.videoElements.size
   }
 
   public getGroup(): THREE.Group {

@@ -256,6 +256,137 @@
       .file-btn:active {
         transform: scale(0.95);
       }
+      
+      .timeline-panel {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+        min-width: 400px;
+        backdrop-filter: blur(5px);
+      }
+      
+      .timeline-controls {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 10px;
+      }
+      
+      .timeline-buttons {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .timeline-btn {
+        width: 36px;
+        height: 36px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #555;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        transition: all 0.2s;
+      }
+      
+      .timeline-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.05);
+      }
+      
+      .timeline-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .timeline-btn.play {
+        border-color: #4ecdc4;
+        color: #4ecdc4;
+      }
+      
+      .timeline-btn.play:hover {
+        background: rgba(78, 205, 196, 0.2);
+      }
+      
+      .timeline-btn.pause {
+        border-color: #ffeaa7;
+        color: #ffeaa7;
+      }
+      
+      .timeline-btn.pause:hover {
+        background: rgba(255, 234, 167, 0.2);
+      }
+      
+      .timeline-btn.stop {
+        border-color: #ff6b6b;
+        color: #ff6b6b;
+      }
+      
+      .timeline-btn.stop:hover {
+        background: rgba(255, 107, 107, 0.2);
+      }
+      
+      .timeline-info {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 11px;
+        color: #ccc;
+      }
+      
+      .timeline-track {
+        flex: 1;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+        position: relative;
+        cursor: pointer;
+        margin: 0 10px;
+      }
+      
+      .timeline-progress {
+        height: 100%;
+        background: linear-gradient(90deg, #4ecdc4, #45b7d1);
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.1s ease;
+      }
+      
+      .timeline-handle {
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 12px;
+        height: 12px;
+        background: #4ecdc4;
+        border: 2px solid white;
+        border-radius: 50%;
+        cursor: grab;
+        left: 0%;
+        transition: left 0.1s ease;
+      }
+      
+      .timeline-handle:active {
+        cursor: grabbing;
+      }
+      
+      .timeline-time {
+        font-size: 10px;
+        color: #999;
+        min-width: 45px;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
@@ -312,13 +443,17 @@
         
         <div class="video-input-group">
           <div class="video-input-label">A7:</div>
-          <input type="text" class="video-input" data-plane="A7" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="A7" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="A7" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="A7" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="A7" title="Refresh A7">⟳</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">BIG-MAP:</div>
-          <input type="text" class="video-input" data-plane="BIG-MAP" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="BIG-MAP" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="BIG-MAP" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="BIG-MAP" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="BIG-MAP" title="Refresh BIG-MAP">⟳</button>
         </div>
         
@@ -332,38 +467,70 @@
         
         <div class="video-input-group">
           <div class="video-input-label">A1:</div>
-          <input type="text" class="video-input" data-plane="A1" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="A1" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="A1" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="A1" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="A1" title="Refresh A1">⟳</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">A2:</div>
-          <input type="text" class="video-input" data-plane="A2" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="A2" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="A2" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="A2" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="A2" title="Refresh A2">⟳</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">K2:</div>
-          <input type="text" class="video-input" data-plane="K2" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="K2" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="K2" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="K2" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="K2" title="Refresh K2">⟳</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">K4:</div>
-          <input type="text" class="video-input" data-plane="K4" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="K4" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="K4" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="K4" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="K4" title="Refresh K4">⟳</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">Skeptrons:</div>
-          <input type="text" class="video-input" data-plane="Skeptrons" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="Skeptrons" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="Skeptrons" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="Skeptrons" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="Skeptrons" title="Refresh Skeptrons">⟳</button>
         </div>
         
         <div class="video-input-group">
           <div class="video-input-label">Stairs:</div>
-          <input type="text" class="video-input" data-plane="Stairs" placeholder="Enter video URL...">
+          <input type="text" class="video-input" data-plane="Stairs" placeholder="Enter video URL or choose file...">
+          <input type="file" class="file-input" data-plane="Stairs" accept="video/*" style="display: none;">
+          <button class="file-btn" data-plane="Stairs" title="Choose local file">📁</button>
           <button class="refresh-btn" data-plane="Stairs" title="Refresh Stairs">⟳</button>
+        </div>
+      </div>
+      
+      <div class="timeline-panel">
+        <div class="timeline-controls">
+          <div class="timeline-buttons">
+            <button class="timeline-btn play" title="Play All Videos">▶</button>
+            <button class="timeline-btn pause" title="Pause All Videos">⏸</button>
+            <button class="timeline-btn stop" title="Stop All Videos">⏹</button>
+          </div>
+          
+          <div class="timeline-info">
+            <span class="timeline-time current-time">0:00</span>
+            <div class="timeline-track">
+              <div class="timeline-progress"></div>
+              <div class="timeline-handle"></div>
+            </div>
+            <span class="timeline-time total-time">0:00</span>
+            <span class="video-count">0 videos</span>
+          </div>
         </div>
       </div>
     </div>
