@@ -62,10 +62,12 @@ export class ArenaVisualizer {
   }
 
   private initLighting(): void {
-    // Ambient light for general illumination
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.4)
+    // Ambient light for general illumination (increased intensity for testing)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0)
     this.scene.add(ambientLight)
 
+    // Disabled lights for testing - uncomment when needed
+    /*
     // Main directional light (sun)
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1)
     directionalLight.position.set(50, 50, 25)
@@ -84,6 +86,7 @@ export class ArenaVisualizer {
     const pointLight = new THREE.PointLight(0xff6b35, 0.5, 100)
     pointLight.position.set(-20, 10, -20)
     this.scene.add(pointLight)
+    */
   }
 
 

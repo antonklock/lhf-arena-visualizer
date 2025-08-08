@@ -36,6 +36,117 @@ function setupCollapsiblePanels(): void {
   window.addEventListener('resize', updateVideosPanelPosition)
 }
 
+// Setup mode toggle
+function setupModeToggle(): void {
+  const modeToggle = document.getElementById('mode-toggle') as HTMLElement
+  const mode2DLabel = document.querySelector('.mode-label[data-mode="2d"]') as HTMLElement
+  const mode3DLabel = document.querySelector('.mode-label[data-mode="3d"]') as HTMLElement
+  
+  let currentMode: '2d' | '3d' = '3d'
+  
+  // Initialize UI to show 3D mode as active
+  modeToggle.classList.add('active')
+  mode2DLabel.classList.remove('active')
+  mode3DLabel.classList.add('active')
+  
+  // Get visualizer instance
+  const getVisualizer = () => (window as any).visualizer
+  
+  // Toggle between 2D and 3D modes
+  const toggleMode = () => {
+    const visualizer = getVisualizer()
+    if (!visualizer) return
+    
+    currentMode = currentMode === '2d' ? '3d' : '2d'
+    
+    // Update UI state
+    if (currentMode === '3d') {
+      modeToggle.classList.add('active')
+      mode2DLabel.classList.remove('active')
+      mode3DLabel.classList.add('active')
+    } else {
+      modeToggle.classList.remove('active')
+      mode2DLabel.classList.add('active')
+      mode3DLabel.classList.remove('active')
+    }
+    
+    // Update Arena mode
+    visualizer.getArena().setMode(currentMode)
+    
+    console.log(`Switched to ${currentMode.toUpperCase()} mode`)
+  }
+  
+  // Add click event listeners
+  modeToggle.addEventListener('click', toggleMode)
+  
+  // Also allow clicking on labels to toggle
+  mode2DLabel.addEventListener('click', () => {
+    if (currentMode !== '2d') toggleMode()
+  })
+  
+  mode3DLabel.addEventListener('click', () => {
+    if (currentMode !== '3d') toggleMode()
+  })
+}
+
+// Setup model version control
+function setupModelVersionControl(): void {
+  const modelVersionInput = document.getElementById('model-version') as HTMLInputElement
+  const loadModelBtn = document.getElementById('load-model') as HTMLButtonElement
+  
+  // Get visualizer instance
+  const getVisualizer = () => (window as any).visualizer
+  
+  // Handle load model button click
+  const loadModelVersion = async () => {
+    const visualizer = getVisualizer()
+    if (!visualizer) return
+    
+    const version = parseInt(modelVersionInput.value)
+    if (isNaN(version) || version < 1 || version > 10) {
+      console.warn('Invalid model version. Please enter a number between 1 and 10.')
+      return
+    }
+    
+    console.log(`Loading model version ${version}...`)
+    
+    // Add loading state to button
+    loadModelBtn.textContent = 'Loading...'
+    loadModelBtn.disabled = true
+    
+    try {
+      await visualizer.getArena().setModelVersion(version)
+      console.log(`Successfully loaded model version ${version}`)
+      loadModelBtn.textContent = 'Loaded!'
+      
+      // Reset button text after a delay
+      setTimeout(() => {
+        loadModelBtn.textContent = 'Load'
+        loadModelBtn.disabled = false
+      }, 1500)
+    } catch (error) {
+      console.error('Failed to load model version:', error)
+      loadModelBtn.textContent = 'Error'
+      
+      // Reset button text after a delay
+      setTimeout(() => {
+        loadModelBtn.textContent = 'Load'
+        loadModelBtn.disabled = false
+      }, 2000)
+    }
+  }
+  
+  // Add event listeners
+  loadModelBtn.addEventListener('click', loadModelVersion)
+  
+  // Also allow Enter key to load model
+  modelVersionInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      loadModelVersion()
+    }
+  })
+}
+
 // Setup timeline controls
 function setupTimelineControls(): void {
   const playBtn = document.querySelector('.timeline-btn.play') as HTMLElement
@@ -413,6 +524,12 @@ function init(): void {
 
   // Add collapsible panel functionality
   setupCollapsiblePanels()
+  
+  // Add mode toggle functionality
+  setupModeToggle()
+  
+  // Add model version control functionality
+  setupModelVersionControl()
   
   // Add video input functionality
   setupVideoControls()

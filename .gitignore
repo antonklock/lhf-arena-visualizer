@@ -155,6 +155,9 @@ __pycache__/
 *.wasm
 *.gltf.bin
 
+# 3D Models (keep them local only)
+public/models/
+
 # Package managers
 package-lock.json.backup
 yarn.lock.backup

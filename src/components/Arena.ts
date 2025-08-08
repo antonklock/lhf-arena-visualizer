@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 interface PlaneConfig {
   name: string
@@ -14,6 +15,11 @@ export class Arena {
   private planeMap: Map<string, THREE.Mesh> = new Map()
   private videoElements: Map<string, HTMLVideoElement> = new Map()
   private videoTextures: Map<string, THREE.VideoTexture> = new Map()
+  private mode: '2d' | '3d' = '3d'
+  private model3D: THREE.Group | null = null
+  private model3DPlanes: Map<string, THREE.Mesh> = new Map()
+  private gltfLoader: GLTFLoader = new GLTFLoader()
+  private currentModelVersion: number = 3
 
   // Plane configurations with exact ratios
   private planeConfigs: PlaneConfig[] = [
@@ -31,6 +37,15 @@ export class Arena {
   constructor() {
     this.group = new THREE.Group()
     this.createPlanes()
+    
+    // Load 3D model immediately if starting in 3D mode
+    if (this.mode === '3d') {
+      this.load3DModel().then(() => {
+        this.show3DMode()
+      }).catch(error => {
+        console.error('Failed to load initial 3D model:', error)
+      })
+    }
   }
 
   private createPlanes(): void {
@@ -180,178 +195,6 @@ export class Arena {
     // Remove the pulsing animation to avoid interfering with highlight system
   }
 
-  public async loadVideoOnPlane(planeName: string, videoSource: string | File): Promise<boolean> {
-    try {
-      const plane = this.planeMap.get(planeName)
-      if (!plane) {
-        console.error(`Plane ${planeName} not found`)
-        return false
-      }
-
-      // Clean up existing video if any
-      this.clearVideoFromPlane(planeName)
-
-      // Create video element
-      const video = document.createElement('video')
-      video.loop = true
-      video.muted = true // Required for autoplay
-      video.playsInline = true
-      video.preload = 'metadata'
-
-      // Handle File objects vs URLs differently
-      if (videoSource instanceof File) {
-        // For File objects, we don't need crossOrigin
-        const objectUrl = URL.createObjectURL(videoSource)
-        video.src = objectUrl
-        
-        // Store object URL for cleanup
-        video.dataset.objectUrl = objectUrl
-      } else {
-        // For URLs, set crossOrigin
-        video.crossOrigin = 'anonymous'
-        video.src = videoSource
-      }
-
-      // Set up video loading promise - wait for loadedmetadata to ensure we have video dimensions
-      const loadPromise = new Promise<boolean>((resolve) => {
-        const onLoadedMetadata = () => {
-          video.removeEventListener('loadedmetadata', onLoadedMetadata)
-          video.removeEventListener('error', onError)
-          resolve(true)
-        }
-
-        const onError = (event: Event) => {
-          video.removeEventListener('loadedmetadata', onLoadedMetadata)
-          video.removeEventListener('error', onError)
-          console.error(`Failed to load video:`, videoSource, event)
-          resolve(false)
-        }
-
-        video.addEventListener('loadedmetadata', onLoadedMetadata)
-        video.addEventListener('error', onError)
-        
-        // Load the video
-        video.load()
-      })
-
-      const loaded = await loadPromise
-      if (!loaded) {
-        return false
-      }
-
-      // Create video texture
-      const videoTexture = new THREE.VideoTexture(video)
-      videoTexture.minFilter = THREE.LinearFilter
-      videoTexture.magFilter = THREE.LinearFilter
-      videoTexture.flipY = false
-
-      // Calculate UV mapping for the video slice
-      const originalWidth = parseFloat(plane.userData.originalDimensions.split('x')[0])
-      const originalHeight = parseFloat(plane.userData.originalDimensions.split('x')[1])
-      const originalAspectRatio = originalWidth / originalHeight
-      
-      // Get actual video aspect ratio from the video element
-      const videoAspectRatio = video.videoWidth / video.videoHeight
-      
-      console.log(`UV Mapping for ${planeName}: Original ${originalAspectRatio.toFixed(2)}:1, Video ${videoAspectRatio.toFixed(2)}:1`)
-      
-      // Apply UV mapping if the video aspect ratio is significantly different from original
-      if (Math.abs(videoAspectRatio - originalAspectRatio) > 0.1) {
-        if (videoAspectRatio < originalAspectRatio) {
-          // Video is taller than needed - crop vertically (show horizontal slice)
-          const heightScale = videoAspectRatio / originalAspectRatio
-          const heightOffset = (1 - heightScale) / 2
-          
-          // For very extreme ratios, use a larger minimum scale to ensure visibility
-          const minScale = planeName === 'A7' || planeName === 'A1' || planeName === 'A2' ? 0.1 : 0.001
-          const actualScale = Math.max(minScale, heightScale)
-          const actualOffset = actualScale === minScale ? (1 - actualScale) / 2 : heightOffset
-          
-          console.log(`Vertical crop for ${planeName}: original scale=${heightScale.toFixed(3)}, actual scale=${actualScale.toFixed(3)}, offset=${actualOffset.toFixed(3)}`)
-          
-          videoTexture.repeat.set(1, actualScale)
-          videoTexture.offset.set(0, actualOffset)
-        } else {
-          // Video is wider than needed - crop horizontally (show vertical slice)
-          const widthScale = originalAspectRatio / videoAspectRatio
-          const widthOffset = (1 - widthScale) / 2
-          
-          console.log(`Horizontal crop for ${planeName}: scale=${widthScale.toFixed(3)}, offset=${widthOffset.toFixed(3)}`)
-          
-          videoTexture.repeat.set(Math.max(0.001, widthScale), 1) // Prevent zero scale
-          videoTexture.offset.set(widthOffset, 0)
-        }
-      } else {
-        // Aspect ratios are similar, use full texture
-        console.log(`No UV mapping needed for ${planeName}`)
-        videoTexture.repeat.set(1, 1)
-        videoTexture.offset.set(0, 0)
-      }
-      
-      // Set proper texture wrapping and parameters to avoid WebGL warnings
-      videoTexture.wrapS = THREE.ClampToEdgeWrap
-      videoTexture.wrapT = THREE.ClampToEdgeWrap
-      videoTexture.generateMipmaps = false
-      videoTexture.needsUpdate = true
-
-      // Create new material with video texture
-      const videoMaterial = new THREE.MeshPhongMaterial({
-        map: videoTexture,
-        transparent: true,
-        opacity: 0.9,
-        side: THREE.DoubleSide
-      })
-
-      // Apply the video material to the plane
-      plane.material = videoMaterial
-      
-      // Debug: Log plane geometry and position for troubleshooting
-      console.log(`Applied video to ${planeName} - Plane geometry:`, {
-        width: plane.geometry.parameters?.width || 'unknown',
-        height: plane.geometry.parameters?.height || 'unknown',
-        position: { x: plane.position.x, y: plane.position.y, z: plane.position.z },
-        visible: plane.visible,
-        material: {
-          opacity: videoMaterial.opacity,
-          transparent: videoMaterial.transparent,
-          side: videoMaterial.side
-        }
-      })
-
-      // Store references
-      this.videoElements.set(planeName, video)
-      this.videoTextures.set(planeName, videoTexture)
-
-      // Start playing the video
-      try {
-        await video.play()
-        console.log(`Video loaded and playing on plane: ${planeName}`, {
-          duration: video.duration,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-          currentTime: video.currentTime,
-          paused: video.paused,
-          readyState: video.readyState
-        })
-      } catch (playError) {
-        console.warn(`Video loaded but couldn't autoplay on plane: ${planeName}`, playError)
-        // Try to play again after a short delay
-        setTimeout(async () => {
-          try {
-            await video.play()
-            console.log(`Video started playing after retry on plane: ${planeName}`)
-          } catch (retryError) {
-            console.error(`Failed to play video after retry on plane: ${planeName}`, retryError)
-          }
-        }, 100)
-      }
-
-      return true
-    } catch (error) {
-      console.error(`Error loading video on plane ${planeName}:`, error)
-      return false
-    }
-  }
 
   public clearVideoFromPlane(planeName: string): void {
     const plane = this.planeMap.get(planeName)
@@ -495,5 +338,350 @@ export class Arena {
 
   public getGroup(): THREE.Group {
     return this.group
+  }
+
+  // Mode switching methods
+  public async setMode(mode: '2d' | '3d'): Promise<void> {
+    if (this.mode === mode) return
+
+    this.mode = mode
+    console.log(`Switching to ${mode} mode`)
+
+    if (mode === '3d') {
+      await this.load3DModel()
+      this.show3DMode()
+    } else {
+      this.show2DMode()
+    }
+  }
+
+  public getMode(): '2d' | '3d' {
+    return this.mode
+  }
+
+  // Model version switching methods
+  public async setModelVersion(version: number): Promise<void> {
+    if (this.currentModelVersion === version) return
+    
+    console.log(`Switching from model version ${this.currentModelVersion} to ${version}`)
+    this.currentModelVersion = version
+    
+    // Clear existing 3D model
+    if (this.model3D) {
+      this.group.remove(this.model3D)
+      this.model3D = null
+      this.model3DPlanes.clear()
+    }
+    
+    // Reload 3D model if we're in 3D mode
+    if (this.mode === '3d') {
+      await this.load3DModel()
+      this.show3DMode()
+    }
+  }
+  
+  public getModelVersion(): number {
+    return this.currentModelVersion
+  }
+
+  private async load3DModel(): Promise<void> {
+    if (this.model3D) {
+      console.log('3D model already loaded')
+      return
+    }
+
+    try {
+      console.log('Loading 3D model...')
+      const gltf = await this.gltfLoader.loadAsync(`/models/LHF_ARENA_WEB_EXPORT_${this.currentModelVersion.toString().padStart(2, '0')}.glb`)
+      this.model3D = gltf.scene
+      
+      // Scale the model if needed
+      this.model3D.scale.setScalar(1)
+      
+      // Position the model
+      this.model3D.position.set(0, 0, 0)
+      
+      // Enable shadows and handle special materials on the model
+      this.model3D.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+          
+          console.log(`Found mesh: ${child.name}`)
+          
+          // Handle inner parts (should be black)
+          if (child.name === 'K2 inner' || child.name === 'K4 inner') {
+            console.log(`Setting ${child.name} to black material`)
+            child.material = new THREE.MeshPhongMaterial({
+              color: 0x000000, // Black
+              transparent: false,
+              side: THREE.DoubleSide
+            })
+          }
+          
+          // Store reference to planes based on their name
+          if (child.name && this.planeConfigs.some(config => config.name === child.name)) {
+            this.model3DPlanes.set(child.name, child)
+            console.log(`Found 3D plane: ${child.name}`)
+          }
+          
+          // Also check for exact name matches with K2/K4 (not inner)
+          if (child.name === 'K2' || child.name === 'K4') {
+            this.model3DPlanes.set(child.name, child)
+            console.log(`Found 3D plane: ${child.name}`)
+          }
+        }
+      })
+      
+      // Add to group but initially hidden
+      this.model3D.visible = false
+      this.group.add(this.model3D)
+      
+      console.log('3D model loaded successfully')
+      console.log('Model bounding box:', {
+        position: this.model3D.position,
+        scale: this.model3D.scale,
+        children: this.model3D.children.length
+      })
+      console.log('Found 3D planes:', Array.from(this.model3DPlanes.keys()))
+      
+      // Calculate and log bounding box
+      const box = new THREE.Box3().setFromObject(this.model3D)
+      console.log('Model bounding box size:', {
+        min: box.min,
+        max: box.max,
+        size: box.getSize(new THREE.Vector3())
+      })
+      
+    } catch (error) {
+      console.error('Failed to load 3D model:', error)
+      throw error
+    }
+  }
+
+  private show2DMode(): void {
+    // Show 2D planes
+    this.planes.forEach(plane => {
+      plane.visible = true
+    })
+    
+    // Hide 3D model
+    if (this.model3D) {
+      this.model3D.visible = false
+    }
+    
+    console.log('Switched to 2D mode')
+  }
+
+  private show3DMode(): void {
+    // Hide 2D planes
+    this.planes.forEach(plane => {
+      plane.visible = false
+    })
+    
+    // Show 3D model
+    if (this.model3D) {
+      this.model3D.visible = true
+    }
+    
+    console.log('Switched to 3D mode')
+  }
+
+  // Override loadVideoOnPlane to work with both modes
+  public async loadVideoOnPlane(planeName: string, videoSource: string | File): Promise<boolean> {
+    // Load video on both 2D and 3D planes if they exist
+    const plane2D = this.planeMap.get(planeName)
+    const plane3D = this.model3DPlanes.get(planeName)
+    
+    let success = false
+    
+    if (plane2D) {
+      success = await this.loadVideoOnSpecificPlane(plane2D, planeName, videoSource) || success
+    }
+    
+    if (plane3D) {
+      success = await this.loadVideoOnSpecificPlane(plane3D, planeName, videoSource) || success
+    }
+    
+    return success
+  }
+
+  private async loadVideoOnSpecificPlane(plane: THREE.Mesh, planeName: string, videoSource: string | File): Promise<boolean> {
+    try {
+      // Clean up existing video if any
+      this.clearVideoFromPlane(planeName)
+
+      // Create video element
+      const video = document.createElement('video')
+      video.loop = true
+      video.muted = true // Required for autoplay
+      video.playsInline = true
+      video.preload = 'metadata'
+
+      // Handle File objects vs URLs differently
+      if (videoSource instanceof File) {
+        // For File objects, we don't need crossOrigin
+        const objectUrl = URL.createObjectURL(videoSource)
+        video.src = objectUrl
+        
+        // Store object URL for cleanup
+        video.dataset.objectUrl = objectUrl
+      } else {
+        // For URLs, set crossOrigin
+        video.crossOrigin = 'anonymous'
+        video.src = videoSource
+      }
+
+      // Set up video loading promise - wait for loadedmetadata to ensure we have video dimensions
+      const loadPromise = new Promise<boolean>((resolve) => {
+        const onLoadedMetadata = () => {
+          video.removeEventListener('loadedmetadata', onLoadedMetadata)
+          video.removeEventListener('error', onError)
+          resolve(true)
+        }
+
+        const onError = (event: Event) => {
+          video.removeEventListener('loadedmetadata', onLoadedMetadata)
+          video.removeEventListener('error', onError)
+          console.error(`Failed to load video:`, videoSource, event)
+          resolve(false)
+        }
+
+        video.addEventListener('loadedmetadata', onLoadedMetadata)
+        video.addEventListener('error', onError)
+        
+        // Load the video
+        video.load()
+      })
+
+      const loaded = await loadPromise
+      if (!loaded) {
+        return false
+      }
+
+      // Create video texture
+      const videoTexture = new THREE.VideoTexture(video)
+      videoTexture.minFilter = THREE.LinearFilter
+      videoTexture.magFilter = THREE.LinearFilter
+      videoTexture.flipY = false
+
+      // Apply UV mapping based on plane type and video dimensions
+      const is3DPlane = this.model3DPlanes.has(planeName)
+      
+      // Get original dimensions from plane config for consistent UV mapping
+      const planeConfig = this.planeConfigs.find(config => config.name === planeName)
+      
+      if (planeConfig) {
+        const originalWidth = planeConfig.width
+        const originalHeight = planeConfig.height
+        const originalAspectRatio = originalWidth / originalHeight
+        
+        // Get actual video aspect ratio from the video element
+        const videoAspectRatio = video.videoWidth / video.videoHeight
+        
+        console.log(`UV Mapping for ${planeName} (${is3DPlane ? '3D' : '2D'}): Original ${originalAspectRatio.toFixed(2)}:1, Video ${videoAspectRatio.toFixed(2)}:1`)
+        
+        // Apply UV mapping if the video aspect ratio is significantly different from original
+        if (Math.abs(videoAspectRatio - originalAspectRatio) > 0.1) {
+          if (videoAspectRatio < originalAspectRatio) {
+            // Video is taller than needed - crop vertically (show horizontal slice)
+            const heightScale = videoAspectRatio / originalAspectRatio
+            const heightOffset = (1 - heightScale) / 2
+            
+            // For very extreme ratios, use a larger minimum scale to ensure visibility
+            let minScale = 0.001
+            if (planeName === 'A7' || planeName === 'A1' || planeName === 'A2') {
+              minScale = 0.1 // Very extreme ratios
+            } else if (planeName === 'K2' || planeName === 'K4') {
+              minScale = 0.05 // K2/K4 need better visibility than default
+            }
+            
+            const actualScale = Math.max(minScale, heightScale)
+            const actualOffset = actualScale === minScale ? (1 - actualScale) / 2 : heightOffset
+            
+            console.log(`Vertical crop for ${planeName}: original scale=${heightScale.toFixed(3)}, actual scale=${actualScale.toFixed(3)}, offset=${actualOffset.toFixed(3)}`)
+            
+            videoTexture.repeat.set(1, actualScale)
+            videoTexture.offset.set(0, actualOffset)
+          } else {
+            // Video is wider than needed - crop horizontally (show vertical slice)
+            const widthScale = originalAspectRatio / videoAspectRatio
+            const widthOffset = (1 - widthScale) / 2
+            
+            console.log(`Horizontal crop for ${planeName}: scale=${widthScale.toFixed(3)}, offset=${widthOffset.toFixed(3)}`)
+            
+            videoTexture.repeat.set(Math.max(0.001, widthScale), 1) // Prevent zero scale
+            videoTexture.offset.set(widthOffset, 0)
+          }
+        } else {
+          // Aspect ratios are similar, use full texture
+          console.log(`No UV mapping needed for ${planeName}`)
+          videoTexture.repeat.set(1, 1)
+          videoTexture.offset.set(0, 0)
+        }
+      } else {
+        // Fallback: use full texture if no config found
+        console.log(`No plane config found for ${planeName}, using full texture`)
+        videoTexture.repeat.set(1, 1)
+        videoTexture.offset.set(0, 0)
+      }
+      
+      // Set proper texture wrapping and parameters to avoid WebGL warnings
+      videoTexture.wrapS = THREE.ClampToEdgeWrap
+      videoTexture.wrapT = THREE.ClampToEdgeWrap
+      videoTexture.generateMipmaps = false
+      videoTexture.needsUpdate = true
+
+      // Create new material with video texture (emissive for visibility)
+      const videoMaterial = new THREE.MeshPhongMaterial({
+        map: videoTexture,
+        emissiveMap: videoTexture,
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: 0.9,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+      })
+
+      // Apply the video material to the plane
+      plane.material = videoMaterial
+      
+      console.log(`Applied video to ${planeName} (${is3DPlane ? '3D' : '2D'} plane)`)
+
+      // Store references (only once per video)
+      if (!this.videoElements.has(planeName)) {
+        this.videoElements.set(planeName, video)
+        this.videoTextures.set(planeName, videoTexture)
+      }
+
+      // Start playing the video
+      try {
+        await video.play()
+        console.log(`Video loaded and playing on plane: ${planeName}`, {
+          duration: video.duration,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          currentTime: video.currentTime,
+          paused: video.paused,
+          readyState: video.readyState
+        })
+      } catch (playError) {
+        console.warn(`Video loaded but couldn't autoplay on plane: ${planeName}`, playError)
+        // Try to play again after a short delay
+        setTimeout(async () => {
+          try {
+            await video.play()
+            console.log(`Video started playing after retry on plane: ${planeName}`)
+          } catch (retryError) {
+            console.error(`Failed to play video after retry on plane: ${planeName}`, retryError)
+          }
+        }, 100)
+      }
+
+      return true
+    } catch (error) {
+      console.error(`Error loading video on plane ${planeName}:`, error)
+      return false
+    }
   }
 }
