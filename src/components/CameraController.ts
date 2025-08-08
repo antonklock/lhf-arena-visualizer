@@ -36,11 +36,14 @@ export class CameraController {
 
     this.initEventListeners()
     
-    // Initialize spherical coordinates from camera position
+    // Set the target to match the camera's lookAt point
+    this.target.set(31.49, 11.64, -0.32)
+    
+    // Initialize spherical coordinates from camera position relative to target
     this.spherical.setFromVector3(this.camera.position.clone().sub(this.target))
     
-    // Start zoomed in to the maximum (minimum radius)
-    this.spherical.radius = 5
+    // The radius should already be 5.00 from the debug values, but ensure it's set
+    this.spherical.radius = 5.00
   }
 
   private initEventListeners(): void {
@@ -186,6 +189,9 @@ export class CameraController {
     
     this.camera.position.copy(position)
     this.camera.lookAt(this.target)
+    
+    // Update debug info
+    this.updateDebugInfo()
   }
 
   public setTarget(target: THREE.Vector3): void {
@@ -194,5 +200,42 @@ export class CameraController {
 
   public getTarget(): THREE.Vector3 {
     return this.target.clone()
+  }
+  
+  private updateDebugInfo(): void {
+    // Update debug display with current camera values
+    const positionElement = document.getElementById('camera-position')
+    const targetElement = document.getElementById('camera-target')
+    const distanceElement = document.getElementById('camera-distance')
+    const thetaElement = document.getElementById('camera-theta')
+    const phiElement = document.getElementById('camera-phi')
+    const radiusElement = document.getElementById('camera-radius')
+    
+    if (positionElement) {
+      positionElement.textContent = `${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}`
+    }
+    
+    if (targetElement) {
+      targetElement.textContent = `${this.target.x.toFixed(2)}, ${this.target.y.toFixed(2)}, ${this.target.z.toFixed(2)}`
+    }
+    
+    if (distanceElement) {
+      const distance = this.camera.position.distanceTo(this.target)
+      distanceElement.textContent = distance.toFixed(2)
+    }
+    
+    if (thetaElement) {
+      const thetaDegrees = (this.spherical.theta * 180 / Math.PI) % 360
+      thetaElement.textContent = thetaDegrees.toFixed(1)
+    }
+    
+    if (phiElement) {
+      const phiDegrees = this.spherical.phi * 180 / Math.PI
+      phiElement.textContent = phiDegrees.toFixed(1)
+    }
+    
+    if (radiusElement) {
+      radiusElement.textContent = this.spherical.radius.toFixed(2)
+    }
   }
 }

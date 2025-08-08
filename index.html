@@ -35,6 +35,33 @@
         font-size: 14px;
       }
       
+      .debug-info {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        color: white;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+        border: 1px solid #444;
+        min-width: 300px;
+        display: none; /* Hidden for now */
+      }
+      
+      .debug-info h4 {
+        margin: 0 0 8px 0;
+        color: #4ecdc4;
+        font-size: 12px;
+      }
+      
+      .debug-info p {
+        margin: 3px 0;
+        color: #ccc;
+      }
+      
       .controls h3 {
         margin: 0 0 10px 0;
       }
@@ -847,6 +874,14 @@
             </div>
           </div>
         </div>
+      </div>
+      
+      <div class="debug-info" id="debug-info">
+        <h4>🔧 Camera Debug Info</h4>
+        <p>Position: <span id="camera-position">0, 0, 0</span></p>
+        <p>Target: <span id="camera-target">0, 0, 0</span></p>
+        <p>Distance: <span id="camera-distance">0</span></p>
+        <p>Spherical: θ=<span id="camera-theta">0</span>° φ=<span id="camera-phi">0</span>° r=<span id="camera-radius">0</span></p>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -81,8 +81,9 @@ export class ArenaVisualizer {
       0.1, // near
       1000 // far
     )
-    this.camera3D.position.set(20, 15, 20)
-    this.camera3D.lookAt(0, 0, 0)
+    // Set camera to the new position
+    this.camera3D.position.set(36.41, 12.50, -0.23)
+    this.camera3D.lookAt(31.49, 11.64, -0.32)
     
     // 2D Orthographic Camera - positioned for top-down view
     const aspect = window.innerWidth / window.innerHeight
