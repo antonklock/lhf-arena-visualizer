@@ -1,0 +1,32 @@
+{
+  "name": "lhf-arena-visualizer",
+  "version": "1.0.0",
+  "description": "ThreeJS Arena Visualizer with TypeScript",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/three": "^0.158.3",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "three": "^0.158.0"
+  },
+  "keywords": [
+    "threejs",
+    "typescript",
+    "webgl",
+    "3d"
+  ],
+  "author": "Anton Klock",
+  "license": "MIT"
+}

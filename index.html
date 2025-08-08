@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LHF Arena Visualizer</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000;
+        font-family: 'Arial', sans-serif;
+      }
+      
+      #app {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
+      
+      canvas {
+        display: block;
+      }
+      
+      .controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 5px;
+        font-size: 14px;
+      }
+      
+      .controls h3 {
+        margin: 0 0 10px 0;
+      }
+      
+      .controls p {
+        margin: 5px 0;
+      }
+      
+      .plane-info {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        color: white;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 5px;
+        font-size: 12px;
+        max-width: 300px;
+        font-family: 'Courier New', monospace;
+        transition: all 0.3s ease;
+      }
+      
+      .plane-info.collapsed {
+        max-height: 40px;
+        overflow: hidden;
+      }
+      
+      .plane-info h3 {
+        margin: 0;
+        padding-bottom: 10px;
+        color: #4ecdc4;
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      
+      .plane-info.collapsed h3 {
+        padding-bottom: 0;
+        margin-bottom: 0;
+      }
+      
+      .collapse-icon {
+        font-size: 14px;
+        transition: transform 0.3s ease;
+      }
+      
+      .collapsed .collapse-icon {
+        transform: rotate(-90deg);
+      }
+      
+      .videos-panel {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        color: white;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 5px;
+        font-size: 12px;
+        max-width: 350px;
+        font-family: 'Courier New', monospace;
+        transition: all 0.3s ease;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      
+      .videos-panel.collapsed {
+        max-height: 40px;
+        overflow: hidden;
+      }
+      
+      .videos-panel h3 {
+        margin: 0;
+        padding-bottom: 10px;
+        color: #fd79a8;
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      
+      .videos-panel.collapsed h3 {
+        padding-bottom: 0;
+        margin-bottom: 0;
+      }
+      
+      .plane-item {
+        display: flex;
+        align-items: center;
+        margin: 0;
+        padding: 8px 3px;
+        cursor: pointer;
+        border-radius: 3px;
+        transition: background-color 0.2s;
+      }
+      
+      .plane-item:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+      
+      .plane-color {
+        width: 20px;
+        height: 12px;
+        margin-right: 8px;
+        border: 1px solid #333;
+      }
+      
+      .plane-details {
+        flex: 1;
+      }
+      
+      .video-input-group {
+        display: flex;
+        align-items: center;
+        margin: 8px 0;
+        gap: 8px;
+      }
+      
+      .video-input-label {
+        min-width: 80px;
+        font-size: 11px;
+        color: #ccc;
+      }
+      
+      .video-input {
+        flex: 1;
+        padding: 4px 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #444;
+        border-radius: 3px;
+        color: white;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+      }
+      
+      .video-input:focus {
+        outline: none;
+        border-color: #4ecdc4;
+        background: rgba(255, 255, 255, 0.15);
+      }
+      
+      .refresh-btn {
+        width: 24px;
+        height: 24px;
+        background: rgba(78, 205, 196, 0.2);
+        border: 1px solid #4ecdc4;
+        border-radius: 3px;
+        color: #4ecdc4;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        transition: all 0.2s;
+      }
+      
+      .refresh-btn:hover {
+        background: rgba(78, 205, 196, 0.4);
+        transform: scale(1.1);
+      }
+      
+      .refresh-btn:active {
+        transform: scale(0.95);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="controls">
+        <h3>Controls</h3>
+        <p>Mouse: Rotate camera</p>
+        <p>Wheel: Zoom in/out</p>
+        <p>WASD: Move around</p>
+      </div>
+      
+      <div class="plane-info collapsed">
+        <h3>Arena Planes <span class="collapse-icon">▼</span></h3>
+        <div class="plane-item" data-plane="A7">
+          <div class="plane-color" style="background-color: #ff6b6b;"></div>
+          <div class="plane-details">A7: 6240×192 (32.5:1)</div>
+        </div>
+        <div class="plane-item" data-plane="BIG-MAP">
+          <div class="plane-color" style="background-color: #4ecdc4;"></div>
+          <div class="plane-details">BIG-MAP: 3840×552 (6.96:1)</div>
+        </div>
+        <div class="plane-item" data-plane="ICE">
+          <div class="plane-color" style="background-color: #45b7d1;"></div>
+          <div class="plane-details">ICE: 4000×2000 (2.0:1)</div>
+        </div>
+        <div class="plane-item" data-plane="A1">
+          <div class="plane-color" style="background-color: #96ceb4;"></div>
+          <div class="plane-details">A1: 10512×144 (73.0:1)</div>
+        </div>
+        <div class="plane-item" data-plane="A2">
+          <div class="plane-color" style="background-color: #ffeaa7;"></div>
+          <div class="plane-details">A2: 10800×144 (75.0:1)</div>
+        </div>
+        <div class="plane-item" data-plane="K2">
+          <div class="plane-color" style="background-color: #dda0dd;"></div>
+          <div class="plane-details">K2: 6976×672 (10.38:1)</div>
+        </div>
+        <div class="plane-item" data-plane="K4">
+          <div class="plane-color" style="background-color: #fd79a8;"></div>
+          <div class="plane-details">K4: 5280×480 (11.0:1)</div>
+        </div>
+        <div class="plane-item" data-plane="Skeptrons">
+          <div class="plane-color" style="background-color: #00b894;"></div>
+          <div class="plane-details">Skeptrons: 512×200 (2.56:1)</div>
+        </div>
+        <div class="plane-item" data-plane="Stairs">
+          <div class="plane-color" style="background-color: #e17055;"></div>
+          <div class="plane-details">Stairs: 48×16 (3.0:1)</div>
+        </div>
+      </div>
+      
+      <div class="videos-panel collapsed">
+        <h3>Videos <span class="collapse-icon">▼</span></h3>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">A7:</div>
+          <input type="text" class="video-input" data-plane="A7" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="A7" title="Refresh A7">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">BIG-MAP:</div>
+          <input type="text" class="video-input" data-plane="BIG-MAP" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="BIG-MAP" title="Refresh BIG-MAP">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">ICE:</div>
+          <input type="text" class="video-input" data-plane="ICE" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="ICE" title="Refresh ICE">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">A1:</div>
+          <input type="text" class="video-input" data-plane="A1" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="A1" title="Refresh A1">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">A2:</div>
+          <input type="text" class="video-input" data-plane="A2" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="A2" title="Refresh A2">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">K2:</div>
+          <input type="text" class="video-input" data-plane="K2" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="K2" title="Refresh K2">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">K4:</div>
+          <input type="text" class="video-input" data-plane="K4" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="K4" title="Refresh K4">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">Skeptrons:</div>
+          <input type="text" class="video-input" data-plane="Skeptrons" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="Skeptrons" title="Refresh Skeptrons">⟳</button>
+        </div>
+        
+        <div class="video-input-group">
+          <div class="video-input-label">Stairs:</div>
+          <input type="text" class="video-input" data-plane="Stairs" placeholder="Enter video URL...">
+          <button class="refresh-btn" data-plane="Stairs" title="Refresh Stairs">⟳</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
