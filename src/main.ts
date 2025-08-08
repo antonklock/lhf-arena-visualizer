@@ -308,6 +308,8 @@ function setupTimelineControls(): void {
 
 // Setup video controls
 function setupVideoControls(): void {
+  const autoDetectCheckbox = document.getElementById('auto-detect-videos') as HTMLInputElement
+  
   // Handle refresh button clicks
   const refreshButtons = document.querySelectorAll('.refresh-btn')
   refreshButtons.forEach(button => {
@@ -329,6 +331,15 @@ function setupVideoControls(): void {
       const fileInput = document.querySelector(`.file-input[data-plane="${planeName}"]`) as HTMLInputElement
       
       if (fileInput) {
+        // Check if auto-detect is enabled
+        if (autoDetectCheckbox && autoDetectCheckbox.checked) {
+          // Enable multiple file selection for auto-detect
+          fileInput.multiple = true
+          console.log('Multiple file selection enabled for auto-detection')
+        } else {
+          // Single file selection for individual plane
+          fileInput.multiple = false
+        }
         fileInput.click()
       }
     })
@@ -339,14 +350,22 @@ function setupVideoControls(): void {
   fileInputs.forEach(input => {
     input.addEventListener('change', (e) => {
       const planeName = (input as HTMLInputElement).getAttribute('data-plane')
-      const file = (e.target as HTMLInputElement).files?.[0]
+      const files = (e.target as HTMLInputElement).files
       
-      if (planeName && file) {
-        const textInput = document.querySelector(`.video-input[data-plane="${planeName}"]`) as HTMLInputElement
-        if (textInput) {
-          textInput.value = file.name // Show filename in text input
+      if (planeName && files && files.length > 0) {
+        // Check if auto-detect is enabled and multiple files are selected
+        if (autoDetectCheckbox && autoDetectCheckbox.checked && files.length > 1) {
+          console.log(`Auto-detecting videos from ${files.length} files`)
+          handleAutoDetectVideos(files)
+        } else {
+          // Single file handling (original behavior)
+          const file = files[0]
+          const textInput = document.querySelector(`.video-input[data-plane="${planeName}"]`) as HTMLInputElement
+          if (textInput) {
+            textInput.value = file.name // Show filename in text input
+          }
+          handleVideoRefreshFromFile(planeName, file)
         }
-        handleVideoRefreshFromFile(planeName, file)
       }
     })
   })
@@ -365,6 +384,146 @@ function setupVideoControls(): void {
       }
     })
   })
+}
+
+// Auto-detect and match videos from multiple files
+async function handleAutoDetectVideos(files: FileList): Promise<void> {
+  console.log('Auto-detecting videos from files:', Array.from(files).map(f => f.name))
+  
+  // Get the visualizer instance
+  const visualizer = (window as any).visualizer
+  if (!visualizer) {
+    console.error('Visualizer not found')
+    return
+  }
+  
+  // Define the plane names we're looking for
+  const targetPlanes = ['A7', 'BIG-MAP', 'ICE', 'A1', 'A2', 'K2', 'K4', 'Skeptrons', 'Stairs']
+  
+  // Create a map to store matched files
+  const matchedFiles = new Map<string, File>()
+  
+  // Try to match files to plane names
+  Array.from(files).forEach(file => {
+    const fileName = file.name.toLowerCase()
+    const nameWithoutExtension = fileName.replace(/\.[^/.]+$/, '') // Remove file extension
+    
+    // Try exact matches first (case insensitive)
+    for (const planeName of targetPlanes) {
+      const lowerPlaneName = planeName.toLowerCase()
+      
+      // Check if filename matches plane name (with or without extension)
+      if (nameWithoutExtension === lowerPlaneName || 
+          fileName.startsWith(lowerPlaneName + '.') ||
+          nameWithoutExtension.endsWith(lowerPlaneName)) {
+        matchedFiles.set(planeName, file)
+        console.log(`Matched ${file.name} -> ${planeName}`)
+        break
+      }
+    }
+  })
+  
+  // Apply matched files to their corresponding planes
+  let successCount = 0
+  let totalMatched = matchedFiles.size
+  
+  console.log(`Found ${totalMatched} matching video files`)
+  
+  for (const [planeName, file] of matchedFiles) {
+    try {
+      console.log(`Loading ${file.name} on ${planeName}...`)
+      
+      // Update the UI input field
+      const textInput = document.querySelector(`.video-input[data-plane="${planeName}"]`) as HTMLInputElement
+      if (textInput) {
+        textInput.value = file.name
+        textInput.style.borderColor = '#ffeaa7' // Yellow for loading
+        textInput.style.backgroundColor = 'rgba(255, 234, 167, 0.1)'
+      }
+      
+      // Load the video
+      const success = await visualizer.getArena().loadVideoOnPlane(planeName, file)
+      
+      if (success) {
+        successCount++
+        // Update input styling to show success
+        if (textInput) {
+          textInput.style.borderColor = '#4ecdc4'
+          textInput.style.backgroundColor = 'rgba(78, 205, 196, 0.1)'
+        }
+        console.log(`✓ Successfully loaded ${file.name} on ${planeName}`)
+      } else {
+        // Update input styling to show error
+        if (textInput) {
+          textInput.style.borderColor = '#ff6b6b'
+          textInput.style.backgroundColor = 'rgba(255, 107, 107, 0.1)'
+        }
+        console.error(`✗ Failed to load ${file.name} on ${planeName}`)
+      }
+    } catch (error) {
+      console.error(`Error loading ${file.name} on ${planeName}:`, error)
+      const textInput = document.querySelector(`.video-input[data-plane="${planeName}"]`) as HTMLInputElement
+      if (textInput) {
+        textInput.style.borderColor = '#ff6b6b'
+        textInput.style.backgroundColor = 'rgba(255, 107, 107, 0.1)'
+      }
+    }
+  }
+  
+  // Show summary
+  console.log(`Auto-detection complete: ${successCount}/${totalMatched} videos loaded successfully`)
+  
+  // Show notification to user (you could implement a proper toast notification system)
+  if (totalMatched > 0) {
+    const message = `Auto-detected ${successCount}/${totalMatched} videos`
+    console.log(`🎬 ${message}`)
+    
+    // Optional: Show a temporary message in the UI
+    showTemporaryMessage(message, successCount === totalMatched ? 'success' : 'warning')
+  } else {
+    console.log('⚠️ No matching video files found. Files should be named like: A7.webm, BIG-MAP.webm, ICE.webm, etc.')
+    showTemporaryMessage('No matching video files found', 'warning')
+  }
+}
+
+// Helper function to show temporary messages
+function showTemporaryMessage(message: string, type: 'success' | 'warning' | 'error'): void {
+  // Create a simple toast-like notification
+  const toast = document.createElement('div')
+  toast.textContent = message
+  toast.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 50px;
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    ${type === 'success' ? 'background: rgba(78, 205, 196, 0.9); border: 1px solid #4ecdc4;' : ''}
+    ${type === 'warning' ? 'background: rgba(255, 234, 167, 0.9); border: 1px solid #ffeaa7; color: #333;' : ''}
+    ${type === 'error' ? 'background: rgba(255, 107, 107, 0.9); border: 1px solid #ff6b6b;' : ''}
+  `
+  
+  document.body.appendChild(toast)
+  
+  // Fade in
+  setTimeout(() => {
+    toast.style.opacity = '1'
+    toast.style.transform = 'translateY(0)'
+  }, 10)
+  
+  // Fade out and remove
+  setTimeout(() => {
+    toast.style.opacity = '0'
+    toast.style.transform = 'translateY(-20px)'
+    setTimeout(() => {
+      document.body.removeChild(toast)
+    }, 300)
+  }, 3000)
 }
 
 // Handle video refresh/load from file
