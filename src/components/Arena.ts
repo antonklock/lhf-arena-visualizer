@@ -23,6 +23,9 @@ export class Arena {
   private gltfLoader: GLTFLoader = new GLTFLoader()
   private currentModelVersion: number = 3
   private readonly MODEL_VERSION_STORAGE_KEY = 'arena-model-version'
+  
+  // Store original materials for proper restoration
+  private originalMaterials: Map<THREE.Mesh, THREE.Material | THREE.Material[]> = new Map()
 
   // Plane configurations with exact ratios
   private planeConfigs: PlaneConfig[] = [
@@ -191,6 +194,7 @@ export class Arena {
   }
 
   public highlightPlane(planeName: string): void {
+    // Handle 2D planes
     this.planes.forEach(plane => {
       const material = plane.material as THREE.MeshPhongMaterial
       if (plane.userData.name === planeName) {
@@ -203,19 +207,141 @@ export class Arena {
         material.emissive.setHex(0x000000) // Remove glow
       }
     })
+    
+    // Handle 3D planes by modifying current material properties
+    if (this.model3D) {
+      // Handle A7 specially - highlight all A7 parts and dim others
+      if (planeName === 'A7' && this.a7Parts.length > 0) {
+        this.a7Parts.forEach(part => {
+          const currentMaterial = part.material as THREE.MeshPhongMaterial
+          if (currentMaterial && currentMaterial.emissiveIntensity !== undefined) {
+            // Boost emissive intensity for highlighting while preserving the material
+            currentMaterial.emissiveIntensity = 1.0
+            currentMaterial.opacity = 1.0
+          }
+        })
+        
+        // Dim all other planes (including BIG-MAP parts and regular planes)
+        this.model3D.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.name && child.material) {
+            // Skip A7 parts as they're already highlighted above
+            if (!this.isSpecialPlane(child.name) || this.bigMapPlanes.includes(child)) {
+              const currentMaterial = child.material as THREE.MeshPhongMaterial
+              if (currentMaterial.emissiveIntensity !== undefined) {
+                currentMaterial.emissiveIntensity = 0.1
+              }
+              if (currentMaterial.opacity !== undefined) {
+                currentMaterial.opacity = Math.min(currentMaterial.opacity, 0.4)
+              }
+            }
+          }
+        })
+      }
+      
+      // Handle BIG-MAP specially - highlight all BIG-MAP parts and dim others
+      else if (planeName === 'BIG-MAP' && this.bigMapPlanes.length > 0) {
+        this.bigMapPlanes.forEach(part => {
+          const currentMaterial = part.material as THREE.MeshPhongMaterial
+          if (currentMaterial && currentMaterial.emissiveIntensity !== undefined) {
+            // Boost emissive intensity for highlighting while preserving the material
+            currentMaterial.emissiveIntensity = 1.0
+            currentMaterial.opacity = 1.0
+          }
+        })
+        
+        // Dim all other planes (including A7 parts and regular planes)
+        this.model3D.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.name && child.material) {
+            // Skip BIG-MAP parts as they're already highlighted above
+            if (!this.bigMapPlanes.includes(child)) {
+              const currentMaterial = child.material as THREE.MeshPhongMaterial
+              if (currentMaterial.emissiveIntensity !== undefined) {
+                currentMaterial.emissiveIntensity = 0.1
+              }
+              if (currentMaterial.opacity !== undefined) {
+                currentMaterial.opacity = Math.min(currentMaterial.opacity, 0.4)
+              }
+            }
+          }
+        })
+      }
+      
+      // Handle other 3D planes
+      else {
+        this.model3D.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.name && child.material) {
+            const currentMaterial = child.material as THREE.MeshPhongMaterial
+            
+            if (child.name === planeName) {
+              // Highlight this plane by boosting emissive intensity
+              if (currentMaterial.emissiveIntensity !== undefined) {
+                currentMaterial.emissiveIntensity = 1.0
+                currentMaterial.opacity = 1.0
+              }
+            } else {
+              // Dim other planes by reducing emissive intensity and opacity
+              if (currentMaterial.emissiveIntensity !== undefined) {
+                currentMaterial.emissiveIntensity = 0.1
+              }
+              if (currentMaterial.opacity !== undefined) {
+                currentMaterial.opacity = Math.min(currentMaterial.opacity, 0.4)
+              }
+            }
+          }
+        })
+      }
+    }
   }
 
   public resetHighlight(): void {
+    // Reset 2D planes
     this.planes.forEach(plane => {
       const material = plane.material as THREE.MeshPhongMaterial
-      material.opacity = plane.userData.originalOpacity
+      material.opacity = plane.userData.originalOpacity || 0.8
       material.emissive.setHex(0x000000) // Remove glow
     })
+    
+    // Reset 3D planes by restoring normal emissive properties while preserving materials
+    if (this.model3D) {
+      this.model3D.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const currentMaterial = child.material as THREE.MeshPhongMaterial
+          
+          // Reset emissive intensity to normal level
+          if (currentMaterial.emissiveIntensity !== undefined) {
+            // For video materials, restore to normal video emissive intensity (0.9)
+            // For non-video materials, restore to 0
+            if (currentMaterial.map && currentMaterial.emissiveMap) {
+              // This is likely a video material
+              currentMaterial.emissiveIntensity = 0.9
+              currentMaterial.opacity = 0.9
+            } else {
+              // This is likely a non-video material
+              currentMaterial.emissiveIntensity = 0.0
+              currentMaterial.opacity = 1.0
+            }
+          }
+        }
+      })
+    }
   }
 
   public update(deltaTime: number): void {
     this.time += deltaTime
     // Remove the pulsing animation to avoid interfering with highlight system
+  }
+  
+  // Helper method to check if a mesh is part of special multi-part planes
+  private isSpecialPlane(meshName: string): boolean {
+    if (!meshName) return false
+    
+    // Check if it's an A7 part
+    if (/^A7[0-9]+$/.test(meshName)) return true
+    
+    // Check if it's a BIG-MAP part
+    if (meshName === 'A0' || meshName === 'A6' || meshName === 'A8' || meshName === 'A9') return true
+    
+    return false
   }
 
 
@@ -449,6 +575,7 @@ export class Arena {
       this.model3DPlanes.clear()
       this.a7Parts = [] // Clear A7 parts array
       this.bigMapPlanes = [] // Clear BIG-MAP parts array
+      this.originalMaterials.clear() // Clear stored materials
     }
     
     // Reload 3D model if we're in 3D mode
@@ -519,48 +646,64 @@ export class Arena {
           allMeshNames.push(child.name || 'UNNAMED')
           console.log(`Found mesh: "${child.name}" (type: ${typeof child.name})`)
           
+          // Store the original material first for ALL meshes
+          this.originalMaterials.set(child, child.material)
+          
           // Handle inner parts (should be black)
           if (child.name === 'K2 inner' || child.name === 'K4 inner') {
             console.log(`Setting ${child.name} to black material`)
-            child.material = new THREE.MeshPhongMaterial({
+            const newMaterial = new THREE.MeshPhongMaterial({
               color: 0x000000, // Black
               transparent: false,
               side: THREE.DoubleSide
             })
+            child.material = newMaterial
+            this.originalMaterials.set(child, newMaterial)
           }
           
           // Handle parts that should be black until proper UV mapping is implemented
-          if (child.name === 'Skeptrons' || child.name === 'Skeptrons_Inside' || 
+          else if (child.name === 'Skeptrons' || child.name === 'Skeptrons_Inside' || 
               child.name === 'Skeptrons_Outside') {
             console.log(`Setting ${child.name} to black material (temporary until UV mapping)`)
-            child.material = new THREE.MeshPhongMaterial({
+            const newMaterial = new THREE.MeshPhongMaterial({
               color: 0x000000, // Black
               transparent: false,
               side: THREE.DoubleSide
             })
+            child.material = newMaterial
+            this.originalMaterials.set(child, newMaterial)
           }
+          
+          // Store the original material before making any changes
+          this.originalMaterials.set(child, child.material)
           
           // Handle A7 parts - set material and collect all parts
           if (child.name && /^A7[0-9]+$/.test(child.name)) {
             console.log(`Setting up ${child.name} with A7 material`)
-            child.material = new THREE.MeshPhongMaterial({
+            const newMaterial = new THREE.MeshPhongMaterial({
               color: 0xff6b6b, // A7 color
               transparent: false,
               side: THREE.FrontSide // Cull backfaces
             })
+            child.material = newMaterial
+            // Update the stored original material to be this new one
+            this.originalMaterials.set(child, newMaterial)
             // Store all A7 parts in separate array
             this.a7Parts.push(child)
             console.log(`Added A7 part: ${child.name}`)
           }
           
           // Handle BIG-MAP planes (A0, A6, A8, A9) - set material and collect all parts
-          if (child.name === 'A0' || child.name === 'A6' || child.name === 'A8' || child.name === 'A9') {
+          else if (child.name === 'A0' || child.name === 'A6' || child.name === 'A8' || child.name === 'A9') {
             console.log(`Setting up ${child.name} with BIG-MAP material`)
-            child.material = new THREE.MeshPhongMaterial({
+            const newMaterial = new THREE.MeshPhongMaterial({
               color: 0x4ecdc4, // BIG-MAP color
               transparent: false,
               side: THREE.FrontSide // Cull backfaces
             })
+            child.material = newMaterial
+            // Update the stored original material to be this new one
+            this.originalMaterials.set(child, newMaterial)
             // Store all BIG-MAP planes in separate array
             this.bigMapPlanes.push(child)
             // Also register individually for potential future use
@@ -569,15 +712,17 @@ export class Arena {
           }
           
           // Handle ceiling (should be almost white)
-          if (child.name && (child.name.toLowerCase().includes('ceiling') || 
+          else if (child.name && (child.name.toLowerCase().includes('ceiling') || 
                             child.name.toLowerCase().includes('roof') ||
                             child.name.toLowerCase().includes('top'))) {
             console.log(`Setting ${child.name} to almost white material`)
-            child.material = new THREE.MeshPhongMaterial({
+            const newMaterial = new THREE.MeshPhongMaterial({
               color: 0xf0f0f0, // Almost white (240, 240, 240)
               transparent: false,
               side: THREE.DoubleSide
             })
+            child.material = newMaterial
+            this.originalMaterials.set(child, newMaterial)
           }
           
           // Store reference to planes based on their name
