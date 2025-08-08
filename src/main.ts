@@ -70,8 +70,9 @@ function setupModeToggle(): void {
       mode3DLabel.classList.remove('active')
     }
     
-    // Update Arena mode
+    // Update Arena mode and camera
     visualizer.getArena().setMode(currentMode)
+    visualizer.switchMode(currentMode)
     
     console.log(`Switched to ${currentMode.toUpperCase()} mode`)
   }

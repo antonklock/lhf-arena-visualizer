@@ -1,16 +1,22 @@
 import * as THREE from 'three'
 import { CameraController } from './CameraController'
+import { Camera2DController } from './Camera2DController'
 import { Arena } from './Arena'
 
 export class ArenaVisualizer {
   private container: HTMLElement
   private scene: THREE.Scene
   private renderer: THREE.WebGLRenderer
-  private camera: THREE.PerspectiveCamera
-  private cameraController: CameraController
+  private camera2D: THREE.OrthographicCamera
+  private camera3D: THREE.PerspectiveCamera
+  private currentCamera: THREE.Camera
+  private cameraController3D: CameraController
+  private cameraController2D: Camera2DController
+  private currentCameraController: CameraController | Camera2DController
   private arena: Arena
   private clock: THREE.Clock
   private animationId: number | null = null
+  private currentMode: '2d' | '3d' = '3d'
   
   // Lighting references and transition state
   private directionalLight1: THREE.DirectionalLight | null = null
@@ -26,11 +32,18 @@ export class ArenaVisualizer {
     // Initialize Three.js components
     this.initScene()
     this.initRenderer()
-    this.initCamera()
+    this.initCameras()
     this.initLighting()
 
-    // Initialize custom components
-    this.cameraController = new CameraController(this.camera, this.renderer.domElement)
+    // Initialize camera controllers
+    this.cameraController3D = new CameraController(this.camera3D, this.renderer.domElement)
+    this.cameraController2D = new Camera2DController(this.camera2D, this.renderer.domElement)
+    
+    // Start with 3D camera
+    this.currentCamera = this.camera3D
+    this.currentCameraController = this.cameraController3D
+    
+    // Initialize arena
     this.arena = new Arena()
     this.scene.add(this.arena.getGroup())
   }
@@ -57,15 +70,30 @@ export class ArenaVisualizer {
     this.container.appendChild(this.renderer.domElement)
   }
 
-  private initCamera(): void {
-    this.camera = new THREE.PerspectiveCamera(
+  private initCameras(): void {
+    // 3D Perspective Camera
+    this.camera3D = new THREE.PerspectiveCamera(
       75, // fov
       window.innerWidth / window.innerHeight, // aspect
       0.1, // near
       1000 // far
     )
-    this.camera.position.set(20, 15, 20)
-    this.camera.lookAt(0, 0, 0)
+    this.camera3D.position.set(20, 15, 20)
+    this.camera3D.lookAt(0, 0, 0)
+    
+    // 2D Orthographic Camera - positioned for top-down view
+    const aspect = window.innerWidth / window.innerHeight
+    const frustumSize = 30
+    this.camera2D = new THREE.OrthographicCamera(
+      frustumSize * aspect / -2, // left
+      frustumSize * aspect / 2,  // right
+      frustumSize / 2,           // top
+      frustumSize / -2,          // bottom
+      0.1,                       // near
+      1000                       // far
+    )
+    this.camera2D.position.set(0, 50, 0) // Top-down view
+    this.camera2D.lookAt(0, 0, 0)
   }
 
   private initLighting(): void {
@@ -129,8 +157,8 @@ export class ArenaVisualizer {
     
     const deltaTime = this.clock.getDelta()
     
-    // Update camera controller
-    this.cameraController.update(deltaTime)
+    // Update current camera controller
+    this.currentCameraController.update(deltaTime)
     
     // Update arena
     this.arena.update(deltaTime)
@@ -139,16 +167,29 @@ export class ArenaVisualizer {
     this.updateLightingTransitions(deltaTime)
     
     // Render the scene
-    this.renderer.render(this.scene, this.camera)
+    this.renderer.render(this.scene, this.currentCamera)
   }
 
   public handleResize(): void {
     const width = window.innerWidth
     const height = window.innerHeight
     
-    // Update camera
-    this.camera.aspect = width / height
-    this.camera.updateProjectionMatrix()
+    // Update 3D camera
+    this.camera3D.aspect = width / height
+    this.camera3D.updateProjectionMatrix()
+    
+    // Update 2D camera (this will be handled by the 2D controller)
+    // but we still need to update the base camera for consistency
+    const aspect = width / height
+    const frustumSize = 30
+    this.camera2D.left = frustumSize * aspect / -2
+    this.camera2D.right = frustumSize * aspect / 2
+    this.camera2D.top = frustumSize / 2
+    this.camera2D.bottom = frustumSize / -2
+    this.camera2D.updateProjectionMatrix()
+    
+    // Notify camera controllers about resize
+    this.cameraController2D.handleResize()
     
     // Update renderer
     this.renderer.setSize(width, height)
@@ -211,9 +252,36 @@ export class ArenaVisualizer {
     }
   }
 
+  // Mode switching method
+  public switchMode(mode: '2d' | '3d'): void {
+    if (this.currentMode === mode) return
+    
+    this.currentMode = mode
+    
+    if (mode === '2d') {
+      this.currentCamera = this.camera2D
+      this.currentCameraController = this.cameraController2D
+      // Set cursor to grab for 2D camera
+      this.renderer.domElement.style.cursor = 'grab'
+    } else {
+      this.currentCamera = this.camera3D
+      this.currentCameraController = this.cameraController3D
+      // Reset cursor for 3D camera
+      this.renderer.domElement.style.cursor = 'default'
+    }
+    
+    console.log(`Switched to ${mode.toUpperCase()} camera mode`)
+  }
+  
+  public getCurrentMode(): '2d' | '3d' {
+    return this.currentMode
+  }
+  
   // Getters for debugging
   public getScene(): THREE.Scene { return this.scene }
-  public getCamera(): THREE.Camera { return this.camera }
+  public getCamera(): THREE.Camera { return this.currentCamera }
+  public get2DCamera(): THREE.OrthographicCamera { return this.camera2D }
+  public get3DCamera(): THREE.PerspectiveCamera { return this.camera3D }
   public getRenderer(): THREE.WebGLRenderer { return this.renderer }
   public getArena(): Arena { return this.arena }
 }
