@@ -13,13 +13,16 @@ export class Arena {
   private time: number = 0
   private planes: THREE.Mesh[] = []
   private planeMap: Map<string, THREE.Mesh> = new Map()
-  private videoElements: Map<string, HTMLVideoElement> = new Map()
-  private videoTextures: Map<string, THREE.VideoTexture> = new Map()
+  private videoElements: Map<string, HTMLVideoElement[]> = new Map() // Store arrays of video elements for multi-plane support
+  private videoTextures: Map<string, THREE.VideoTexture[]> = new Map() // Store arrays of textures for multi-plane support
   private mode: '2d' | '3d' = '3d'
   private model3D: THREE.Group | null = null
   private model3DPlanes: Map<string, THREE.Mesh> = new Map()
+  private a7Parts: THREE.Mesh[] = [] // Store all A7 parts separately
+  private bigMapPlanes: THREE.Mesh[] = [] // Store A0, A6, A8, A9 for BIG-MAP videos
   private gltfLoader: GLTFLoader = new GLTFLoader()
   private currentModelVersion: number = 3
+  private readonly MODEL_VERSION_STORAGE_KEY = 'arena-model-version'
 
   // Plane configurations with exact ratios
   private planeConfigs: PlaneConfig[] = [
@@ -31,11 +34,16 @@ export class Arena {
     { name: 'K2', width: 6976, height: 672, color: 0xdda0dd },
     { name: 'K4', width: 5280, height: 480, color: 0xfd79a8 },
     { name: 'Skeptrons', width: 512, height: 200, color: 0x00b894 },
-    { name: 'Stairs', width: 48, height: 16, color: 0xe17055 }
+    { name: 'Stairs', width: 48, height: 16, color: 0xe17055 },
+    { name: 'A9', width: 3840, height: 552, color: 0x4ecdc4 } // Uses BIG-MAP texture
   ]
 
   constructor() {
     this.group = new THREE.Group()
+    
+    // Load model version from localStorage or use default
+    this.loadModelVersionFromStorage()
+    
     this.createPlanes()
     
     // Load 3D model immediately if starting in 3D mode
@@ -79,12 +87,23 @@ export class Arena {
 
       const plane = new THREE.Mesh(geometry, material)
 
-      // Use calculated tight positions
-      plane.position.set(
-        positions[index].x,
-        0.1, // Fixed level for all planes
-        positions[index].z
-      )
+      // Use calculated tight positions - ensure position exists
+      const position = positions[index]
+      if (position) {
+        plane.position.set(
+          position.x,
+          0.1, // Fixed level for all planes
+          position.z
+        )
+      } else {
+        // Fallback position if calculation failed
+        plane.position.set(
+          (index % 3 - 1) * 5,
+          0.1,
+          Math.floor(index / 3) * 5
+        )
+        console.warn(`Using fallback position for plane ${config.name} at index ${index}`)
+      }
 
       // Rotate to lay flat
       plane.rotation.x = -Math.PI / 2
@@ -127,13 +146,13 @@ export class Arena {
       name: config.name
     }))
 
-    // Arrange in a 3x3 grid with tight spacing
+    // Arrange in a 4x3 grid to accommodate 10 planes (with 2 empty slots)
     const positions: Array<{x: number, z: number}> = []
-    const rows = 3
+    const rows = 4
     const cols = 3
     
     // Calculate spacing based on largest dimensions in each row/column
-    const rowMaxHeights = [0, 0, 0]
+    const rowMaxHeights = [0, 0, 0, 0]
     const colMaxWidths = [0, 0, 0]
     
     // Find max dimensions for each row and column
@@ -141,8 +160,12 @@ export class Arena {
       const row = Math.floor(index / cols)
       const col = index % cols
       
-      rowMaxHeights[row] = Math.max(rowMaxHeights[row], dim.height)
-      colMaxWidths[col] = Math.max(colMaxWidths[col], dim.width)
+      if (row < rowMaxHeights.length) {
+        rowMaxHeights[row] = Math.max(rowMaxHeights[row], dim.height)
+      }
+      if (col < colMaxWidths.length) {
+        colMaxWidths[col] = Math.max(colMaxWidths[col], dim.width)
+      }
     })
     
     // Calculate positions with tight spacing
@@ -155,7 +178,7 @@ export class Arena {
         if (index < this.planeConfigs.length) {
           positions.push({
             x: currentX - (colMaxWidths[0] + colMaxWidths[1] + colMaxWidths[2]) / 2 + colMaxWidths[col] / 2,
-            z: currentZ - (rowMaxHeights[0] + rowMaxHeights[1] + rowMaxHeights[2]) / 2 + rowMaxHeights[row] / 2
+            z: currentZ - (rowMaxHeights[0] + rowMaxHeights[1] + rowMaxHeights[2] + rowMaxHeights[3]) / 2 + rowMaxHeights[row] / 2
           })
         }
         currentX += colMaxWidths[col] + 2 // Small gap between columns
@@ -197,44 +220,85 @@ export class Arena {
 
 
   public clearVideoFromPlane(planeName: string): void {
+    // Handle 2D plane
     const plane = this.planeMap.get(planeName)
-    if (!plane) {
-      console.error(`Plane ${planeName} not found`)
-      return
+    if (plane) {
+      // Get original color from userData
+      const originalColor = plane.userData.originalColor
+
+      // Restore original material
+      const originalMaterial = new THREE.MeshPhongMaterial({
+        color: originalColor,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+      })
+
+      plane.material = originalMaterial
     }
 
-    // Get original color from userData
-    const originalColor = plane.userData.originalColor
-
-    // Restore original material
-    const originalMaterial = new THREE.MeshPhongMaterial({
-      color: originalColor,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    })
-
-    plane.material = originalMaterial
+    // Handle A7 specially - clear from all A7 parts
+    if (planeName === 'A7' && this.a7Parts.length > 0) {
+      console.log(`Clearing video from all ${this.a7Parts.length} A7 parts`)
+      for (const a7Part of this.a7Parts) {
+        a7Part.material = new THREE.MeshPhongMaterial({
+          color: 0xff6b6b, // A7 color
+          transparent: false,
+          side: THREE.FrontSide // Cull backfaces
+        })
+      }
+    }
+    // Handle BIG-MAP specially - clear from all BIG-MAP parts (A0, A6, A8, A9)
+    else if (planeName === 'BIG-MAP' && this.bigMapPlanes.length > 0) {
+      console.log(`Clearing BIG-MAP video from all ${this.bigMapPlanes.length} BIG-MAP parts`)
+      for (const bigMapPart of this.bigMapPlanes) {
+        bigMapPart.material = new THREE.MeshPhongMaterial({
+          color: 0x4ecdc4, // BIG-MAP color
+          transparent: false,
+          side: THREE.FrontSide // Cull backfaces
+        })
+      }
+    }
+    // Handle other 3D planes normally
+    else {
+      const plane3D = this.model3DPlanes.get(planeName)
+      if (plane3D) {
+        // Determine original color based on plane name
+        let originalColor = 0x808080 // Default gray
+        const planeConfig = this.planeConfigs.find(config => config.name === planeName)
+        if (planeConfig) {
+          originalColor = planeConfig.color
+        }
+        
+        plane3D.material = new THREE.MeshPhongMaterial({
+          color: originalColor,
+          transparent: false,
+          side: THREE.DoubleSide
+        })
+      }
+    }
 
     // Clean up video resources
-    const video = this.videoElements.get(planeName)
-    if (video) {
-      video.pause()
-      
-      // Clean up object URL if it exists
-      if (video.dataset.objectUrl) {
-        URL.revokeObjectURL(video.dataset.objectUrl)
-        delete video.dataset.objectUrl
-      }
-      
-      video.src = ''
-      video.load() // This helps free up memory
+    const videos = this.videoElements.get(planeName)
+    if (videos) {
+      videos.forEach(video => {
+        video.pause()
+        
+        // Clean up object URL if it exists
+        if (video.dataset.objectUrl) {
+          URL.revokeObjectURL(video.dataset.objectUrl)
+          delete video.dataset.objectUrl
+        }
+        
+        video.src = ''
+        video.load() // This helps free up memory
+      })
       this.videoElements.delete(planeName)
     }
 
-    const texture = this.videoTextures.get(planeName)
-    if (texture) {
-      texture.dispose()
+    const textures = this.videoTextures.get(planeName)
+    if (textures) {
+      textures.forEach(texture => texture.dispose())
       this.videoTextures.delete(planeName)
     }
 
@@ -251,75 +315,84 @@ export class Arena {
 
   // Timeline control methods
   public playAllVideos(): void {
-    this.videoElements.forEach((video, planeName) => {
-      try {
-        // Only try to play if the video is paused and has a valid source
-        if (video.paused && video.src && !video.src.includes('blob:')) {
-          video.play()
-          console.log(`Playing video on plane: ${planeName}`)
-        } else if (video.paused && video.src && video.src.includes('blob:')) {
-          // For blob URLs, check if the object URL is still valid
-          if (video.dataset.objectUrl) {
+    this.videoElements.forEach((videos, planeName) => {
+      videos.forEach((video, index) => {
+        try {
+          // Only try to play if the video is paused and has a valid source
+          if (video.paused && video.src && !video.src.includes('blob:')) {
             video.play()
-            console.log(`Playing blob video on plane: ${planeName}`)
+            console.log(`Playing video on plane: ${planeName} (part ${index + 1})`)
+          } else if (video.paused && video.src && video.src.includes('blob:')) {
+            // For blob URLs, check if the object URL is still valid
+            if (video.dataset.objectUrl) {
+              video.play()
+              console.log(`Playing blob video on plane: ${planeName} (part ${index + 1})`)
+            } else {
+              console.warn(`Blob URL invalid for video on plane: ${planeName} (part ${index + 1})`)
+            }
+          } else if (!video.paused) {
+            console.log(`Video already playing on plane: ${planeName} (part ${index + 1})`)
           } else {
-            console.warn(`Blob URL invalid for video on plane: ${planeName}`)
+            console.warn(`No valid source for video on plane: ${planeName} (part ${index + 1})`, { src: video.src, readyState: video.readyState })
           }
-        } else if (!video.paused) {
-          console.log(`Video already playing on plane: ${planeName}`)
-        } else {
-          console.warn(`No valid source for video on plane: ${planeName}`, { src: video.src, readyState: video.readyState })
+        } catch (error) {
+          console.warn(`Failed to play video on plane ${planeName} (part ${index + 1}):`, error)
         }
-      } catch (error) {
-        console.warn(`Failed to play video on plane ${planeName}:`, error)
-      }
+      })
     })
   }
 
   public pauseAllVideos(): void {
-    this.videoElements.forEach((video, planeName) => {
-      try {
-        video.pause()
-        console.log(`Paused video on plane: ${planeName}`)
-      } catch (error) {
-        console.warn(`Failed to pause video on plane ${planeName}:`, error)
-      }
+    this.videoElements.forEach((videos, planeName) => {
+      videos.forEach((video, index) => {
+        try {
+          video.pause()
+          console.log(`Paused video on plane: ${planeName} (part ${index + 1})`)
+        } catch (error) {
+          console.warn(`Failed to pause video on plane ${planeName} (part ${index + 1}):`, error)
+        }
+      })
     })
   }
 
   public stopAndRewindAllVideos(): void {
-    this.videoElements.forEach((video, planeName) => {
-      try {
-        video.pause()
-        video.currentTime = 0
-        console.log(`Stopped and rewound video on plane: ${planeName}`)
-      } catch (error) {
-        console.warn(`Failed to stop video on plane ${planeName}:`, error)
-      }
+    this.videoElements.forEach((videos, planeName) => {
+      videos.forEach((video, index) => {
+        try {
+          video.pause()
+          video.currentTime = 0
+          console.log(`Stopped and rewound video on plane: ${planeName} (part ${index + 1})`)
+        } catch (error) {
+          console.warn(`Failed to stop video on plane ${planeName} (part ${index + 1}):`, error)
+        }
+      })
     })
   }
 
   public seekAllVideos(percentage: number): void {
-    this.videoElements.forEach((video, planeName) => {
-      try {
-        if (video.duration && !isNaN(video.duration)) {
-          video.currentTime = (percentage / 100) * video.duration
+    this.videoElements.forEach((videos, planeName) => {
+      videos.forEach((video, index) => {
+        try {
+          if (video.duration && !isNaN(video.duration)) {
+            video.currentTime = (percentage / 100) * video.duration
+          }
+        } catch (error) {
+          console.warn(`Failed to seek video on plane ${planeName} (part ${index + 1}):`, error)
         }
-      } catch (error) {
-        console.warn(`Failed to seek video on plane ${planeName}:`, error)
-      }
+      })
     })
   }
 
   public getVideoPlaybackInfo(): { currentTime: number; duration: number; isPlaying: boolean; videoCount: number } {
-    const videos = Array.from(this.videoElements.values())
+    const allVideoArrays = Array.from(this.videoElements.values())
+    const allVideos = allVideoArrays.flat()
     
-    if (videos.length === 0) {
+    if (allVideos.length === 0) {
       return { currentTime: 0, duration: 0, isPlaying: false, videoCount: 0 }
     }
 
     // Use the first video as reference for timing
-    const referenceVideo = videos[0]
+    const referenceVideo = allVideos[0]
     const currentTime = referenceVideo.currentTime || 0
     const duration = referenceVideo.duration || 0
     const isPlaying = !referenceVideo.paused && !referenceVideo.ended
@@ -328,7 +401,7 @@ export class Arena {
       currentTime,
       duration,
       isPlaying,
-      videoCount: videos.length
+      videoCount: allVideos.length
     }
   }
 
@@ -366,11 +439,16 @@ export class Arena {
     console.log(`Switching from model version ${this.currentModelVersion} to ${version}`)
     this.currentModelVersion = version
     
+    // Save to localStorage
+    this.saveModelVersionToStorage()
+    
     // Clear existing 3D model
     if (this.model3D) {
       this.group.remove(this.model3D)
       this.model3D = null
       this.model3DPlanes.clear()
+      this.a7Parts = [] // Clear A7 parts array
+      this.bigMapPlanes = [] // Clear BIG-MAP parts array
     }
     
     // Reload 3D model if we're in 3D mode
@@ -382,6 +460,36 @@ export class Arena {
   
   public getModelVersion(): number {
     return this.currentModelVersion
+  }
+
+  // localStorage methods for model version persistence
+  private loadModelVersionFromStorage(): void {
+    try {
+      const storedVersion = localStorage.getItem(this.MODEL_VERSION_STORAGE_KEY)
+      if (storedVersion !== null) {
+        const version = parseInt(storedVersion, 10)
+        if (!isNaN(version) && version > 0) {
+          this.currentModelVersion = version
+          console.log(`Loaded model version ${version} from localStorage`)
+        } else {
+          console.warn(`Invalid model version in localStorage: ${storedVersion}. Using default: ${this.currentModelVersion}`)
+        }
+      } else {
+        console.log(`No model version found in localStorage. Using default: ${this.currentModelVersion}`)
+      }
+    } catch (error) {
+      console.error('Failed to load model version from localStorage:', error)
+      console.log(`Using default model version: ${this.currentModelVersion}`)
+    }
+  }
+
+  private saveModelVersionToStorage(): void {
+    try {
+      localStorage.setItem(this.MODEL_VERSION_STORAGE_KEY, this.currentModelVersion.toString())
+      console.log(`Saved model version ${this.currentModelVersion} to localStorage`)
+    } catch (error) {
+      console.error('Failed to save model version to localStorage:', error)
+    }
   }
 
   private async load3DModel(): Promise<void> {
@@ -402,18 +510,71 @@ export class Arena {
       this.model3D.position.set(0, 0, 0)
       
       // Enable shadows and handle special materials on the model
+      const allMeshNames: string[] = []
       this.model3D.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           child.castShadow = true
           child.receiveShadow = true
           
-          console.log(`Found mesh: ${child.name}`)
+          allMeshNames.push(child.name || 'UNNAMED')
+          console.log(`Found mesh: "${child.name}" (type: ${typeof child.name})`)
           
           // Handle inner parts (should be black)
           if (child.name === 'K2 inner' || child.name === 'K4 inner') {
             console.log(`Setting ${child.name} to black material`)
             child.material = new THREE.MeshPhongMaterial({
               color: 0x000000, // Black
+              transparent: false,
+              side: THREE.DoubleSide
+            })
+          }
+          
+          // Handle parts that should be black until proper UV mapping is implemented
+          if (child.name === 'Skeptrons' || child.name === 'Skeptrons_Inside' || 
+              child.name === 'Skeptrons_Outside') {
+            console.log(`Setting ${child.name} to black material (temporary until UV mapping)`)
+            child.material = new THREE.MeshPhongMaterial({
+              color: 0x000000, // Black
+              transparent: false,
+              side: THREE.DoubleSide
+            })
+          }
+          
+          // Handle A7 parts - set material and collect all parts
+          if (child.name && /^A7[0-9]+$/.test(child.name)) {
+            console.log(`Setting up ${child.name} with A7 material`)
+            child.material = new THREE.MeshPhongMaterial({
+              color: 0xff6b6b, // A7 color
+              transparent: false,
+              side: THREE.FrontSide // Cull backfaces
+            })
+            // Store all A7 parts in separate array
+            this.a7Parts.push(child)
+            console.log(`Added A7 part: ${child.name}`)
+          }
+          
+          // Handle BIG-MAP planes (A0, A6, A8, A9) - set material and collect all parts
+          if (child.name === 'A0' || child.name === 'A6' || child.name === 'A8' || child.name === 'A9') {
+            console.log(`Setting up ${child.name} with BIG-MAP material`)
+            child.material = new THREE.MeshPhongMaterial({
+              color: 0x4ecdc4, // BIG-MAP color
+              transparent: false,
+              side: THREE.FrontSide // Cull backfaces
+            })
+            // Store all BIG-MAP planes in separate array
+            this.bigMapPlanes.push(child)
+            // Also register individually for potential future use
+            this.model3DPlanes.set(child.name, child)
+            console.log(`Added BIG-MAP plane: ${child.name}`)
+          }
+          
+          // Handle ceiling (should be almost white)
+          if (child.name && (child.name.toLowerCase().includes('ceiling') || 
+                            child.name.toLowerCase().includes('roof') ||
+                            child.name.toLowerCase().includes('top'))) {
+            console.log(`Setting ${child.name} to almost white material`)
+            child.material = new THREE.MeshPhongMaterial({
+              color: 0xf0f0f0, // Almost white (240, 240, 240)
               transparent: false,
               side: THREE.DoubleSide
             })
@@ -433,6 +594,12 @@ export class Arena {
         }
       })
       
+      // Register the first A7 part as representative for the A7 plane config
+      if (this.a7Parts.length > 0) {
+        this.model3DPlanes.set('A7', this.a7Parts[0])
+        console.log(`Registered A7 plane with ${this.a7Parts.length} parts`)
+      }
+      
       // Add to group but initially hidden
       this.model3D.visible = false
       this.group.add(this.model3D)
@@ -444,6 +611,11 @@ export class Arena {
         children: this.model3D.children.length
       })
       console.log('Found 3D planes:', Array.from(this.model3DPlanes.keys()))
+      console.log('ALL MODEL MESH NAMES:', allMeshNames)
+      console.log('A7 PARTS FOUND:', this.a7Parts.length)
+      console.log('A7 PART NAMES:', this.a7Parts.map(part => part.name))
+      console.log('BIG-MAP PARTS FOUND:', this.bigMapPlanes.length)
+      console.log('BIG-MAP PART NAMES:', this.bigMapPlanes.map(part => part.name))
       
       // Calculate and log bounding box
       const box = new THREE.Box3().setFromObject(this.model3D)
@@ -491,7 +663,6 @@ export class Arena {
   public async loadVideoOnPlane(planeName: string, videoSource: string | File): Promise<boolean> {
     // Load video on both 2D and 3D planes if they exist
     const plane2D = this.planeMap.get(planeName)
-    const plane3D = this.model3DPlanes.get(planeName)
     
     let success = false
     
@@ -499,17 +670,43 @@ export class Arena {
       success = await this.loadVideoOnSpecificPlane(plane2D, planeName, videoSource) || success
     }
     
-    if (plane3D) {
-      success = await this.loadVideoOnSpecificPlane(plane3D, planeName, videoSource) || success
+    // Handle A7 specially - apply to all A7 parts
+    if (planeName === 'A7' && this.a7Parts.length > 0) {
+      console.log(`Loading video on all ${this.a7Parts.length} A7 parts`)
+      // Clear video resources once before loading on all parts
+      this.clearVideoFromPlane(planeName)
+      for (const a7Part of this.a7Parts) {
+        const partSuccess = await this.loadVideoOnSpecificPlane(a7Part, planeName, videoSource, true) // Skip clearing for individual parts
+        success = partSuccess || success
+      }
+    }
+    // Handle BIG-MAP specially - it maps to A0, A6, A8, A9 in 3D mode
+    else if (planeName === 'BIG-MAP' && this.bigMapPlanes.length > 0) {
+      console.log(`Loading BIG-MAP video on all ${this.bigMapPlanes.length} BIG-MAP parts`)
+      // Clear video resources once before loading on all parts
+      this.clearVideoFromPlane(planeName)
+      for (const bigMapPart of this.bigMapPlanes) {
+        const partSuccess = await this.loadVideoOnSpecificPlane(bigMapPart, planeName, videoSource, true) // Skip clearing for individual parts
+        success = partSuccess || success
+      }
+    }
+    // Handle other 3D planes normally
+    else {
+      const plane3D = this.model3DPlanes.get(planeName)
+      if (plane3D) {
+        success = await this.loadVideoOnSpecificPlane(plane3D, planeName, videoSource) || success
+      }
     }
     
     return success
   }
 
-  private async loadVideoOnSpecificPlane(plane: THREE.Mesh, planeName: string, videoSource: string | File): Promise<boolean> {
+  private async loadVideoOnSpecificPlane(plane: THREE.Mesh, planeName: string, videoSource: string | File, skipClear: boolean = false): Promise<boolean> {
     try {
-      // Clean up existing video if any
-      this.clearVideoFromPlane(planeName)
+      // Clean up existing video if any (unless specifically skipped)
+      if (!skipClear) {
+        this.clearVideoFromPlane(planeName)
+      }
 
       // Create video element
       const video = document.createElement('video')
@@ -633,6 +830,8 @@ export class Arena {
       videoTexture.needsUpdate = true
 
       // Create new material with video texture (emissive for visibility)
+      // Use FrontSide for A7 and BIG-MAP planes to cull backfaces
+      const shouldCullBackfaces = planeName === 'A7' || planeName === 'BIG-MAP'
       const videoMaterial = new THREE.MeshPhongMaterial({
         map: videoTexture,
         emissiveMap: videoTexture,
@@ -640,7 +839,7 @@ export class Arena {
         emissiveIntensity: 0.9,
         transparent: true,
         opacity: 0.9,
-        side: THREE.DoubleSide
+        side: shouldCullBackfaces ? THREE.FrontSide : THREE.DoubleSide
       })
 
       // Apply the video material to the plane
@@ -648,35 +847,32 @@ export class Arena {
       
       console.log(`Applied video to ${planeName} (${is3DPlane ? '3D' : '2D'} plane)`)
 
-      // Store references (only once per video)
-      if (!this.videoElements.has(planeName)) {
-        this.videoElements.set(planeName, video)
-        this.videoTextures.set(planeName, videoTexture)
+      // Store references for video playback control
+      // For A7 parts, we want to store the video with the 'A7' key so timeline controls work
+      // For BIG-MAP loading onto multiple parts, we want to use 'BIG-MAP' as the key
+      const storageKey = planeName === 'BIG-MAP' ? 'BIG-MAP' : planeName
+      
+      // Initialize arrays if they don't exist
+      if (!this.videoElements.has(storageKey)) {
+        this.videoElements.set(storageKey, [])
+        this.videoTextures.set(storageKey, [])
       }
+      
+      // Add both video element and texture to their respective arrays
+      const videoArray = this.videoElements.get(storageKey)!
+      const textureArray = this.videoTextures.get(storageKey)!
+      videoArray.push(video)
+      textureArray.push(videoTexture)
 
-      // Start playing the video
-      try {
-        await video.play()
-        console.log(`Video loaded and playing on plane: ${planeName}`, {
-          duration: video.duration,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-          currentTime: video.currentTime,
-          paused: video.paused,
-          readyState: video.readyState
-        })
-      } catch (playError) {
-        console.warn(`Video loaded but couldn't autoplay on plane: ${planeName}`, playError)
-        // Try to play again after a short delay
-        setTimeout(async () => {
-          try {
-            await video.play()
-            console.log(`Video started playing after retry on plane: ${planeName}`)
-          } catch (retryError) {
-            console.error(`Failed to play video after retry on plane: ${planeName}`, retryError)
-          }
-        }, 100)
-      }
+      // Video loaded successfully - keep it paused until user explicitly plays
+      console.log(`Video loaded and ready on plane: ${planeName}`, {
+        duration: video.duration,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        currentTime: video.currentTime,
+        paused: video.paused,
+        readyState: video.readyState
+      })
 
       return true
     } catch (error) {

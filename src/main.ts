@@ -97,6 +97,16 @@ function setupModelVersionControl(): void {
   // Get visualizer instance
   const getVisualizer = () => (window as any).visualizer
   
+  // Sync UI with current model version from Arena
+  const syncUIWithModelVersion = () => {
+    const visualizer = getVisualizer()
+    if (visualizer) {
+      const currentVersion = visualizer.getArena().getModelVersion()
+      modelVersionInput.value = currentVersion.toString()
+      console.log(`UI synced with model version: ${currentVersion}`)
+    }
+  }
+  
   // Handle load model button click
   const loadModelVersion = async () => {
     const visualizer = getVisualizer()
@@ -205,6 +215,8 @@ function setupTimelineControls(): void {
     const visualizer = getVisualizer()
     if (visualizer) {
       visualizer.getArena().playAllVideos()
+      // Update lighting for playing state
+      visualizer.updateLightingBasedOnVideoState()
       // Start timeline updates
       if (!animationFrameId) {
         updateTimelineDisplay()
@@ -217,6 +229,8 @@ function setupTimelineControls(): void {
     const visualizer = getVisualizer()
     if (visualizer) {
       visualizer.getArena().pauseAllVideos()
+      // Update lighting for paused state
+      visualizer.updateLightingBasedOnVideoState()
       // Stop timeline updates
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
@@ -230,6 +244,8 @@ function setupTimelineControls(): void {
     const visualizer = getVisualizer()
     if (visualizer) {
       visualizer.getArena().stopAndRewindAllVideos()
+      // Update lighting for paused state
+      visualizer.updateLightingBasedOnVideoState()
       // Stop timeline updates and reset display
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
@@ -530,6 +546,20 @@ function init(): void {
   
   // Add model version control functionality
   setupModelVersionControl()
+  
+  // Sync UI with the model version loaded from localStorage
+  // Delay slightly to ensure Arena is fully initialized
+  setTimeout(() => {
+    const syncModelVersionUI = () => {
+      const modelVersionInput = document.getElementById('model-version') as HTMLInputElement
+      if (modelVersionInput && visualizer) {
+        const currentVersion = visualizer.getArena().getModelVersion()
+        modelVersionInput.value = currentVersion.toString()
+        console.log(`UI synced with model version from localStorage: ${currentVersion}`)
+      }
+    }
+    syncModelVersionUI()
+  }, 100)
   
   // Add video input functionality
   setupVideoControls()
